@@ -3,41 +3,110 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Choose Login | Refined Travel</title>
+    <title>Login | Refined Travel</title>
     @vite(['resources/css/app.css'])
 </head>
 <body class="min-h-screen bg-stone-50 text-slate-950 antialiased">
-    <main class="mx-auto flex min-h-screen max-w-7xl items-center px-5 py-10 sm:px-8">
-        <div class="w-full">
-            <div class="mb-9 flex items-center justify-between">
-                <a href="{{ url('/') }}" class="text-lg font-black tracking-wide text-slate-950">Refined Travel</a>
-                <a href="{{ url('/') }}" class="text-sm font-bold text-emerald-700 hover:text-emerald-800">Back home</a>
-            </div>
+    <main class="grid min-h-screen lg:grid-cols-[0.92fr_1.08fr]">
+        <section class="flex min-h-screen items-center justify-center px-5 py-10 sm:px-8">
+            <div class="w-full max-w-md">
+                <div class="mb-9 flex items-center justify-between">
+                    <a href="{{ url('/') }}" class="text-lg font-black tracking-wide text-slate-950">Refined Travel</a>
+                    <a href="{{ url('/') }}" class="text-sm font-bold text-emerald-700 hover:text-emerald-800">Back home</a>
+                </div>
 
-            <div class="mb-8 max-w-3xl">
-                <p class="text-sm font-black uppercase tracking-[0.24em] text-emerald-700">Login type</p>
-                <h1 class="mt-3 text-4xl font-black leading-tight text-slate-950 sm:text-5xl">Choose your account role</h1>
-                <p class="mt-4 text-base leading-7 text-slate-600">
-                    Choose User if you want to book tickets, or Event Owner if you want to manage and display your events.
-                </p>
-            </div>
+                <section class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
+                    <div>
+                        <p class="text-sm font-black uppercase tracking-[0.22em] text-emerald-700">Account Login</p>
+                        <h1 class="mt-2 text-3xl font-black leading-tight text-slate-950">Sign in to your dashboard</h1>
+                        <p class="mt-3 text-sm leading-6 text-slate-600">
+                            Use one email and password. The system will open the correct dashboard for your account role.
+                        </p>
+                    </div>
 
-            <div class="grid gap-6 lg:grid-cols-2">
-                <a href="{{ route('login.user') }}" class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:shadow-md">
-                    <p class="text-sm font-black uppercase tracking-[0.22em] text-emerald-700">User</p>
-                    <h2 class="mt-3 text-2xl font-black text-slate-950">Book events</h2>
-                    <p class="mt-3 text-sm leading-6 text-slate-600">For customers who want to book tickets and view booking history.</p>
-                    <span class="mt-6 inline-flex min-h-11 items-center justify-center rounded-md bg-emerald-700 px-5 text-sm font-black text-white">User login</span>
-                </a>
+                    @if ($errors->any())
+                        <div class="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                            {{ $errors->first() }}
+                        </div>
+                    @endif
 
-                <a href="{{ route('login.owner') }}" class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:shadow-md">
-                    <p class="text-sm font-black uppercase tracking-[0.22em] text-amber-700">Event Owner</p>
-                    <h2 class="mt-3 text-2xl font-black text-slate-950">Manage events</h2>
-                    <p class="mt-3 text-sm leading-6 text-slate-600">For organizers who create event pages, update details, and review bookings.</p>
-                    <span class="mt-6 inline-flex min-h-11 items-center justify-center rounded-md bg-amber-400 px-5 text-sm font-black text-slate-950">Owner login</span>
-                </a>
+                    @if (session('success'))
+                        <div class="mt-6 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+                            {{ session('success') }}
+                        </div>
+                    @endif
+
+                    <form method="POST" action="{{ route('login.store') }}" class="mt-8 space-y-5">
+                        @csrf
+
+                        <div>
+                            <label for="email" class="block text-sm font-bold text-slate-800">Email address</label>
+                            <input
+                                id="email"
+                                name="email"
+                                type="email"
+                                autocomplete="email"
+                                required
+                                value="{{ old('email') }}"
+                                placeholder="you@example.com"
+                                class="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                            >
+                        </div>
+
+                        <div>
+                            <label for="password" class="block text-sm font-bold text-slate-800">Password</label>
+                            <input
+                                id="password"
+                                name="password"
+                                type="password"
+                                autocomplete="current-password"
+                                required
+                                placeholder="Enter your password"
+                                class="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                            >
+                        </div>
+
+                        <button
+                            type="submit"
+                            class="min-h-12 w-full rounded-md bg-emerald-700 px-5 text-sm font-black text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        >
+                            Sign in
+                        </button>
+                    </form>
+
+                    {{-- <div class="mt-7 rounded-md bg-stone-50 p-4 text-sm font-semibold leading-6 text-slate-600 ring-1 ring-slate-200">
+                        <p class="font-black text-slate-950">Demo accounts</p>
+                        <p class="mt-1">Admin: admin@example.com / password</p>
+                        <p>Owner: owner@example.com / password</p>
+                        <p>User: user@example.com / password</p>
+                    </div> --}}
+
+                    <p class="mt-7 text-center text-sm font-semibold text-slate-600">
+                        Need an admin account?
+                        <a href="{{ route('register') }}" class="font-black text-emerald-700 hover:text-emerald-800">Register</a>
+                    </p>
+                </section>
             </div>
-        </div>
+        </section>
+
+        <section class="relative hidden overflow-hidden lg:block">
+            <img
+                src="https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1600&q=85"
+                alt="People working at an event table"
+                class="absolute inset-0 h-full w-full object-cover"
+            >
+            <div class="absolute inset-0 bg-slate-950/50"></div>
+            <div class="relative z-10 flex h-full flex-col justify-between p-10 text-white">
+                <a href="{{ url('/') }}" class="text-lg font-black tracking-wide">Refined Travel</a>
+                <div class="max-w-xl">
+                    <p class="text-sm font-black uppercase tracking-[0.28em] text-amber-300">One login</p>
+                    <h2 class="mt-4 text-5xl font-black leading-tight">Your role decides where you go next.</h2>
+                    <p class="mt-5 text-base leading-7 text-white/82">
+                        Customers manage tickets, owners manage events, and admins review the whole platform from the same sign-in page.
+                    </p>
+                </div>
+            </div>
+        </section>
     </main>
 </body>
 </html>

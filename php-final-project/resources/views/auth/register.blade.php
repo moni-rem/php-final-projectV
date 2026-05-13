@@ -18,13 +18,19 @@
                 <div class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
                     <div>
                         <p class="text-sm font-black uppercase tracking-[0.22em] text-emerald-700">Register</p>
-                        <h2 class="mt-2 text-3xl font-black text-slate-950">Create your account</h2>
+                        <h2 class="mt-2 text-3xl font-black text-slate-950">Create an admin account</h2>
                         <p class="mt-3 text-sm leading-6 text-slate-600">
-                            Join Refined Travel to save favorite stays and collect trip ideas.
+                            Register with administrator access to review users, bookings, events, and platform activity.
                         </p>
                     </div>
 
-                    <form method="POST" action="#" class="mt-8 space-y-5">
+                    @if ($errors->any())
+                        <div class="mt-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                            Please check the form and try again.
+                        </div>
+                    @endif
+
+                    <form method="POST" action="{{ route('register.store') }}" class="mt-8 space-y-5">
                         @csrf
 
                         <div>
@@ -36,8 +42,12 @@
                                 autocomplete="name"
                                 required
                                 placeholder="Your name"
+                                value="{{ old('name') }}"
                                 class="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                             >
+                            @error('name')
+                                <p class="mt-2 text-xs font-bold text-red-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         <div>
@@ -49,8 +59,28 @@
                                 autocomplete="email"
                                 required
                                 placeholder="you@example.com"
+                                value="{{ old('email') }}"
                                 class="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                             >
+                            @error('email')
+                                <p class="mt-2 text-xs font-bold text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div>
+                            <label for="phone" class="block text-sm font-bold text-slate-800">Phone number</label>
+                            <input
+                                id="phone"
+                                name="phone"
+                                type="tel"
+                                autocomplete="tel"
+                                placeholder="+855 12 345 678"
+                                value="{{ old('phone') }}"
+                                class="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                            >
+                            @error('phone')
+                                <p class="mt-2 text-xs font-bold text-red-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         <div>
@@ -64,6 +94,9 @@
                                 placeholder="Create a password"
                                 class="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
                             >
+                            @error('password')
+                                <p class="mt-2 text-xs font-bold text-red-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         <div>
@@ -81,19 +114,22 @@
 
                         <label class="flex items-start gap-3 text-sm font-semibold leading-6 text-slate-700">
                             <input type="checkbox" name="terms" required class="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600">
-                            I agree to receive travel updates and account emails.
+                            I agree to create an admin account for this website.
                         </label>
+                        @error('terms')
+                            <p class="-mt-3 text-xs font-bold text-red-600">{{ $message }}</p>
+                        @enderror
 
                         <button
                             type="submit"
                             class="min-h-12 w-full rounded-md bg-emerald-700 px-5 text-sm font-black text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300"
                         >
-                            Create account
+                            Register as admin
                         </button>
                     </form>
 
                     <p class="mt-7 text-center text-sm font-semibold text-slate-600">
-                        Already have an account?
+                        Already have an admin account?
                         <a href="{{ route('login') }}" class="font-black text-emerald-700 hover:text-emerald-800">Sign in</a>
                     </p>
                 </div>
@@ -110,10 +146,10 @@
             <div class="relative z-10 flex h-full flex-col justify-between p-10 text-white">
                 <a href="{{ url('/') }}" class="text-lg font-black tracking-wide">Refined Travel</a>
                 <div class="max-w-xl">
-                    <p class="text-sm font-black uppercase tracking-[0.28em] text-amber-300">Start exploring</p>
-                    <h1 class="mt-4 text-5xl font-black leading-tight">Keep every trip idea close at hand.</h1>
+                    <p class="text-sm font-black uppercase tracking-[0.28em] text-amber-300">Admin access</p>
+                    <h1 class="mt-4 text-5xl font-black leading-tight">Keep the event platform organized.</h1>
                     <p class="mt-5 text-base leading-7 text-white/82">
-                        Build shortlists, save local guides, and return whenever inspiration strikes.
+                        Review accounts, bookings, events, and the activity that keeps the website running.
                     </p>
                 </div>
             </div>

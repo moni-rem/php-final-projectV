@@ -7,6 +7,13 @@
     @vite(['resources/css/app.css'])
 </head>
 <body class="min-h-screen bg-stone-50 text-slate-900 antialiased">
+    @php
+        $eventSearch = $eventSearch ?? '';
+        $events = $events ?? [];
+        $totalEventsCount = $totalEventsCount ?? count($events);
+        $visibleEventsCount = count($events);
+    @endphp
+
     <header class="absolute inset-x-0 top-0 z-20">
         <nav class="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
             <a href="/" class="text-lg font-black tracking-wide text-white">Refined Travel</a>
@@ -59,8 +66,38 @@
                 </p>
             </div>
 
+            <form method="GET" action="{{ url('/') }}#stays" class="mb-8 rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200">
+                <div class="grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+                    <div>
+                        <label for="event_search" class="block text-xs font-black uppercase tracking-[0.18em] text-slate-400">Search events</label>
+                        <input
+                            id="event_search"
+                            name="event_search"
+                            value="{{ $eventSearch }}"
+                            placeholder="Search by title, category, location, date, or price"
+                            class="mt-2 min-h-12 w-full rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                        >
+                    </div>
+                    <button type="submit" class="inline-flex min-h-12 items-center justify-center rounded-md bg-emerald-700 px-6 text-sm font-black text-white hover:bg-emerald-800">
+                        Search
+                    </button>
+                    @if ($eventSearch !== '')
+                        <a href="{{ url('/') }}#stays" class="inline-flex min-h-12 items-center justify-center rounded-md border border-slate-300 px-6 text-sm font-black text-slate-800 hover:bg-stone-50">
+                            Clear
+                        </a>
+                    @endif
+                </div>
+                <p class="mt-3 text-sm font-semibold text-slate-500">
+                    @if ($eventSearch !== '')
+                        Showing {{ $visibleEventsCount }} of {{ $totalEventsCount }} event(s) for "{{ $eventSearch }}".
+                    @else
+                        Showing {{ $visibleEventsCount }} event(s).
+                    @endif
+                </p>
+            </form>
+
             <div class="grid gap-6 md:grid-cols-3">
-                @forelse (($events ?? []) as $slug => $event)
+                @forelse ($events as $slug => $event)
                     <a href="{{ route('events.show', $slug) }}" class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:shadow-md">
                         <img src="{{ $event['image'] }}" alt="{{ $event['title'] }}" class="h-56 w-full object-cover">
                         <div class="p-5">
@@ -76,7 +113,14 @@
                 @empty
                     <div class="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center md:col-span-3">
                         <p class="text-sm font-black uppercase tracking-[0.2em] text-slate-400">No events</p>
-                        <h3 class="mt-2 text-2xl font-black text-slate-950">No owner events published yet</h3>
+                        <h3 class="mt-2 text-2xl font-black text-slate-950">
+                            {{ $eventSearch !== '' ? 'No events match your search' : 'No owner events published yet' }}
+                        </h3>
+                        @if ($eventSearch !== '')
+                            <a href="{{ url('/') }}#stays" class="mt-5 inline-flex min-h-11 items-center justify-center rounded-md bg-emerald-700 px-5 text-sm font-black text-white hover:bg-emerald-800">
+                                Clear search
+                            </a>
+                        @endif
                     </div>
                 @endforelse
             </div>

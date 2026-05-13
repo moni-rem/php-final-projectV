@@ -12,8 +12,10 @@ use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 
 $eventToView = function (Event $event): array {
@@ -88,9 +90,93 @@ $allBookingViews = fn () => Booking::with(['event', 'status', 'payment', 'user']
     ->map(fn (Booking $booking) => $bookingToView($booking))
     ->all();
 
-Route::get('/', function () use ($allEventViews) {
+$createPublishedEvent = function (Request $request, User $organizer): Event {
+    $validated = $request->validate([
+        'title' => ['required', 'string', 'max:200'],
+        'category_name' => ['required', 'string', 'max:100'],
+        'description' => ['required', 'string', 'max:3000'],
+        'location' => ['required', 'string', 'max:255'],
+        'event_date' => ['required', 'date'],
+        'start_time' => ['required', 'date_format:H:i'],
+        'end_time' => ['nullable', 'date_format:H:i', 'after:start_time'],
+        'total_seats' => ['required', 'integer', 'min:1'],
+        'ticket_price' => ['required', 'numeric', 'min:0'],
+        'image' => ['nullable', 'url', 'max:255'],
+        'image2' => ['nullable', 'url', 'max:255'],
+        'image3' => ['nullable', 'url', 'max:255'],
+        'map_url' => ['nullable', 'url'],
+        'what_to_expect' => ['nullable', 'string', 'max:2000'],
+        'important_information' => ['nullable', 'string', 'max:2000'],
+    ]);
+
+    $category = EventCategory::firstOrCreate(['category_name' => $validated['category_name']]);
+    $status = EventStatus::firstOrCreate(['status_name' => 'published']);
+    $slugBase = Str::slug($validated['title']);
+    $slug = $slugBase;
+    $counter = 2;
+
+    while (Event::where('slug', $slug)->exists()) {
+        $slug = $slugBase . '-' . $counter;
+        $counter++;
+    }
+
+    $splitLines = fn (?string $value, array $fallback = []) => collect(preg_split('/\r\n|\r|\n/', $value ?? ''))
+        ->map(fn (string $line) => trim($line))
+        ->filter()
+        ->values()
+        ->all() ?: $fallback;
+
+    return Event::create([
+        'organizer_id' => $organizer->id,
+        'category_id' => $category->id,
+        'status_id' => $status->id,
+        'slug' => $slug,
+        'title' => $validated['title'],
+        'description' => $validated['description'],
+        'about' => $validated['description'],
+        'what_to_expect' => $splitLines($validated['what_to_expect'] ?? null, ['Engaging activities', 'Friendly staff', 'Memorable experience']),
+        'important_information' => $splitLines($validated['important_information'] ?? null, [
+            'Please arrive 15-30 minutes early for check-in',
+            'Booked tickets are non-refundable and cannot be returned or canceled',
+        ]),
+        'location' => $validated['location'],
+        'event_date' => $validated['event_date'],
+        'start_time' => $validated['start_time'],
+        'end_time' => $validated['end_time'] ?? null,
+        'total_seats' => $validated['total_seats'],
+        'ticket_price' => $validated['ticket_price'],
+        'image' => $validated['image'] ?? 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1600&q=85',
+        'image2' => $validated['image2'] ?? null,
+        'image3' => $validated['image3'] ?? null,
+        'map_url' => $validated['map_url'] ?? null,
+    ]);
+};
+
+Route::get('/', function (Request $request) use ($allEventViews) {
+    $eventSearch = trim((string) $request->query('event_search', ''));
+    $events = $allEventViews();
+
+    if ($eventSearch !== '') {
+        $events = collect($events)
+            ->filter(function (array $event) use ($eventSearch) {
+                $haystack = strtolower(implode(' ', [
+                    $event['title'] ?? '',
+                    $event['category'] ?? '',
+                    $event['location'] ?? '',
+                    $event['description'] ?? '',
+                    $event['date'] ?? '',
+                    $event['price'] ?? '',
+                ]));
+
+                return str_contains($haystack, strtolower($eventSearch));
+            })
+            ->all();
+    }
+
     return view('welcome', [
-        'events' => $allEventViews(),
+        'events' => $events,
+        'eventSearch' => $eventSearch,
+        'totalEventsCount' => count($allEventViews()),
     ]);
 });
 
@@ -98,36 +184,74 @@ Route::get('/login', function () {
     return view('auth.login');
 })->name('login');
 
-Route::get('/login/user', function () {
-    return view('auth.role-login', [
-        'role' => 'User',
-        'routeName' => 'user.dashboard',
-        'headline' => 'Book events and manage your tickets.',
-        'description' => 'Use this login for normal customers who want to book events and view booking history.',
+Route::post('/login', function (Request $request) {
+    $credentials = $request->validate([
+        'email' => ['required', 'email'],
+        'password' => ['required', 'string'],
     ]);
-})->name('login.user');
 
-Route::get('/login/owner', function () {
-    return view('auth.role-login', [
-        'role' => 'Event Owner',
-        'routeName' => 'owner.dashboard',
-        'headline' => 'Create and display your events.',
-        'description' => 'Use this login for event organizers who need to publish events, update details, and monitor bookings.',
-    ]);
-})->name('login.owner');
+    if (! Auth::attempt($credentials)) {
+        return back()
+            ->withErrors(['email' => 'The email or password is incorrect.'])
+            ->onlyInput('email');
+    }
 
-Route::get('/login/admin', function () {
-    return view('auth.role-login', [
-        'role' => 'Admin',
-        'routeName' => 'admin.dashboard',
-        'headline' => 'See what is happening in the system.',
-        'description' => 'Use this login for administrators who review users, bookings, events, and platform activity.',
-    ]);
-})->name('login.admin');
+    $request->session()->regenerate();
+
+    $user = Auth::user()->loadMissing('role');
+    $dashboardRoute = match ($user->role?->role_name) {
+        'admin' => 'admin.dashboard',
+        'event_owner' => 'owner.dashboard',
+        default => 'user.dashboard',
+    };
+
+    return redirect()
+        ->route($dashboardRoute)
+        ->with('success', 'Welcome back, ' . ($user->full_name ?: $user->name) . '.');
+})->name('login.store');
+
+Route::post('/logout', function (Request $request) {
+    Auth::logout();
+
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return redirect()
+        ->route('login')
+        ->with('success', 'You have been logged out.');
+})->name('logout');
 
 Route::get('/register', function () {
     return view('auth.register');
 })->name('register');
+
+Route::post('/register', function (Request $request) {
+    $validated = $request->validate([
+        'name' => ['required', 'string', 'max:150'],
+        'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+        'phone' => ['nullable', 'string', 'max:20'],
+        'password' => ['required', 'string', 'min:6', 'confirmed'],
+        'terms' => ['accepted'],
+    ]);
+
+    $adminRole = Role::firstOrCreate(['role_name' => 'admin']);
+
+    $user = User::create([
+        'name' => $validated['name'],
+        'full_name' => $validated['name'],
+        'email' => $validated['email'],
+        'phone' => $validated['phone'] ?? null,
+        'password' => Hash::make($validated['password']),
+        'role_id' => $adminRole->id,
+    ]);
+
+    Auth::login($user);
+    $request->session()->regenerate();
+
+    return redirect()
+        ->route('admin.dashboard')
+        ->with('success', 'Admin account registered successfully.');
+})->name('register.store');
 
 Route::get('/dashboard/user', function () use ($allBookingViews) {
     return view('dashboard.user', [
@@ -135,9 +259,14 @@ Route::get('/dashboard/user', function () use ($allBookingViews) {
     ]);
 })->name('user.dashboard');
 
-Route::get('/dashboard/owner', function () use ($allEventViews) {
+Route::get('/dashboard/owner', function () {
     return view('dashboard.owner', [
-        'events' => $allEventViews(),
+        'events' => Event::with(['category', 'status'])
+            ->withCount('bookings')
+            ->withSum('bookings as booked_tickets', 'quantity')
+            ->withSum('bookings as gross_sales', 'total_price')
+            ->orderByDesc('created_at')
+            ->get(),
     ]);
 })->name('owner.dashboard');
 
@@ -223,11 +352,252 @@ Route::post('/dashboard/owner/events', function (Request $request) {
         ->with('success', 'Event published to the main page.');
 })->name('owner.events.store');
 
-Route::get('/dashboard/admin', function () use ($allEventViews, $allBookingViews) {
+Route::get('/dashboard/owner/events/{event}', function (string $event) {
+    $eventModel = Event::with(['category', 'status'])
+        ->withCount('bookings')
+        ->withSum('bookings as booked_tickets', 'quantity')
+        ->withSum('bookings as gross_sales', 'total_price')
+        ->where('slug', $event)
+        ->firstOrFail();
+
+    return view('dashboard.owner-event-show', [
+        'event' => $eventModel,
+        'bookings' => $eventModel->bookings()
+            ->with(['user', 'status', 'payment.status'])
+            ->latest('booking_date')
+            ->get(),
+    ]);
+})->name('owner.events.show');
+
+Route::get('/dashboard/admin/events/create', function () {
+    return view('dashboard.owner-create-event', [
+        'dashboardRoute' => 'admin.events.index',
+        'formAction' => route('admin.events.store'),
+        'sectionLabel' => 'Admin Event Management',
+        'pageTitle' => 'Add event as admin',
+        'submitLabel' => 'Publish event as admin',
+    ]);
+})->name('admin.events.create');
+
+Route::post('/dashboard/admin/events', function (Request $request) use ($createPublishedEvent) {
+    $adminRole = Role::firstOrCreate(['role_name' => 'admin']);
+    $admin = Auth::user() ?? User::firstOrCreate(
+        ['email' => 'admin@example.com'],
+        [
+            'name' => 'Admin User',
+            'full_name' => 'Admin User',
+            'password' => Hash::make('password'),
+            'phone' => '+855 12 000 002',
+            'role_id' => $adminRole->id,
+        ],
+    );
+
+    $createPublishedEvent($request, $admin);
+
+    return redirect()
+        ->route('admin.events.index')
+        ->with('success', 'Admin published a new event to the website.');
+})->name('admin.events.store');
+
+Route::patch('/dashboard/admin/events/{event}', function (Request $request, Event $event) {
+    $validated = $request->validate([
+        'title' => ['required', 'string', 'max:200'],
+        'category_name' => ['required', 'string', 'max:100'],
+        'description' => ['required', 'string', 'max:3000'],
+        'location' => ['required', 'string', 'max:255'],
+        'event_date' => ['required', 'date'],
+        'start_time' => ['required', 'date_format:H:i'],
+        'end_time' => ['nullable', 'date_format:H:i', 'after:start_time'],
+        'total_seats' => ['required', 'integer', 'min:1'],
+        'ticket_price' => ['required', 'numeric', 'min:0'],
+        'image' => ['nullable', 'url', 'max:255'],
+        'image2' => ['nullable', 'url', 'max:255'],
+        'image3' => ['nullable', 'url', 'max:255'],
+        'map_url' => ['nullable', 'url'],
+    ]);
+
+    $category = EventCategory::firstOrCreate(['category_name' => $validated['category_name']]);
+
+    $event->update([
+        'category_id' => $category->id,
+        'title' => $validated['title'],
+        'description' => $validated['description'],
+        'about' => $validated['description'],
+        'location' => $validated['location'],
+        'event_date' => $validated['event_date'],
+        'start_time' => $validated['start_time'],
+        'end_time' => $validated['end_time'] ?? null,
+        'total_seats' => $validated['total_seats'],
+        'ticket_price' => $validated['ticket_price'],
+        'image' => $validated['image'] ?: $event->image,
+        'image2' => $validated['image2'] ?? null,
+        'image3' => $validated['image3'] ?? null,
+        'map_url' => $validated['map_url'] ?? null,
+    ]);
+
+    return redirect()
+        ->route('admin.events.index')
+        ->with('success', 'Event updated.');
+})->name('admin.events.update');
+
+Route::delete('/dashboard/admin/events/{event}', function (Event $event) {
+    $event->loadCount('bookings');
+
+    if ($event->bookings_count > 0) {
+        return redirect()
+            ->route('admin.events.index')
+            ->withErrors(['event' => 'This event already has bookings, so delete is blocked to protect booking history.']);
+    }
+
+    $event->delete();
+
+    return redirect()
+        ->route('admin.events.index')
+        ->with('success', 'Event deleted.');
+})->name('admin.events.destroy');
+
+Route::get('/dashboard/admin/events', function (Request $request) {
+    $eventSearch = trim((string) $request->query('event_search', ''));
+
+    return view('dashboard.admin-events', [
+        'adminUser' => Auth::user()?->loadMissing('role'),
+        'events' => Event::with(['category', 'status'])
+            ->withCount('bookings')
+            ->withSum('bookings as booked_tickets', 'quantity')
+            ->withSum('bookings as gross_sales', 'total_price')
+            ->when($eventSearch !== '', function ($query) use ($eventSearch) {
+                $query->where(function ($query) use ($eventSearch) {
+                    $query->where('title', 'like', '%' . $eventSearch . '%')
+                        ->orWhere('location', 'like', '%' . $eventSearch . '%')
+                        ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery->where('category_name', 'like', '%' . $eventSearch . '%'));
+                });
+            })
+            ->latest('id')
+            ->get(),
+        'eventSearch' => $eventSearch,
+    ]);
+})->name('admin.events.index');
+
+Route::post('/dashboard/admin/users', function (Request $request) {
+    $validated = $request->validate([
+        'name' => ['required', 'string', 'max:150'],
+        'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+        'phone' => ['nullable', 'string', 'max:20'],
+        'role_id' => ['required', Rule::exists('roles', 'id')],
+        'password' => ['required', 'string', 'min:6'],
+    ]);
+
+    User::create([
+        'name' => $validated['name'],
+        'full_name' => $validated['name'],
+        'email' => $validated['email'],
+        'phone' => $validated['phone'] ?? null,
+        'password' => Hash::make($validated['password']),
+        'role_id' => $validated['role_id'],
+    ]);
+
+    return redirect()
+        ->route('admin.users.index')
+        ->with('success', 'User account created.');
+})->name('admin.users.store');
+
+Route::patch('/dashboard/admin/users/{user}', function (Request $request, User $user) {
+    $validated = $request->validate([
+        'name' => ['required', 'string', 'max:150'],
+        'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+        'phone' => ['nullable', 'string', 'max:20'],
+        'role_id' => ['required', Rule::exists('roles', 'id')],
+        'password' => ['nullable', 'string', 'min:6'],
+    ]);
+
+    $attributes = [
+        'name' => $validated['name'],
+        'full_name' => $validated['name'],
+        'email' => $validated['email'],
+        'phone' => $validated['phone'] ?? null,
+        'role_id' => $validated['role_id'],
+    ];
+
+    if (! empty($validated['password'])) {
+        $attributes['password'] = Hash::make($validated['password']);
+    }
+
+    $user->update($attributes);
+
+    return redirect()
+        ->route('admin.users.index')
+        ->with('success', 'User account updated.');
+})->name('admin.users.update');
+
+Route::delete('/dashboard/admin/users/{user}', function (User $user) {
+    $user->loadCount(['bookings', 'organizedEvents']);
+
+    if ($user->bookings_count > 0 || $user->organized_events_count > 0) {
+        return redirect()
+            ->route('admin.users.index')
+            ->withErrors(['user' => 'This user has bookings or events, so delete is blocked to protect existing records.']);
+    }
+
+    if (Auth::id() === $user->id) {
+        return redirect()
+            ->route('admin.users.index')
+            ->withErrors(['user' => 'You cannot delete the account you are currently using.']);
+    }
+
+    $user->delete();
+
+    return redirect()
+        ->route('admin.users.index')
+        ->with('success', 'User account deleted.');
+})->name('admin.users.destroy');
+
+Route::get('/dashboard/admin/users', function (Request $request) {
+    $userSearch = trim((string) $request->query('user_search', ''));
+
+    return view('dashboard.admin-users', [
+        'adminUser' => Auth::user()?->loadMissing('role'),
+        'usersCount' => User::count(),
+        'users' => User::with('role')
+            ->withCount(['bookings', 'organizedEvents'])
+            ->when($userSearch !== '', function ($query) use ($userSearch) {
+                $query->where(function ($query) use ($userSearch) {
+                    $query->where('name', 'like', '%' . $userSearch . '%')
+                        ->orWhere('full_name', 'like', '%' . $userSearch . '%')
+                        ->orWhere('email', 'like', '%' . $userSearch . '%')
+                        ->orWhere('phone', 'like', '%' . $userSearch . '%')
+                        ->orWhereHas('role', fn ($roleQuery) => $roleQuery->where('role_name', 'like', '%' . $userSearch . '%'));
+                });
+            })
+            ->latest('id')
+            ->get(),
+        'roles' => Role::orderBy('role_name')->get(),
+        'userSearch' => $userSearch,
+    ]);
+})->name('admin.users.index');
+
+Route::get('/dashboard/admin', function (Request $request) use ($allEventViews, $allBookingViews) {
+    $userSearch = trim((string) $request->query('user_search', ''));
+
     return view('dashboard.admin', [
+        'adminUser' => Auth::user()?->loadMissing('role'),
         'events' => $allEventViews(),
         'bookings' => $allBookingViews(),
         'usersCount' => User::count(),
+        'users' => User::with('role')
+            ->withCount(['bookings', 'organizedEvents'])
+            ->when($userSearch !== '', function ($query) use ($userSearch) {
+                $query->where(function ($query) use ($userSearch) {
+                    $query->where('name', 'like', '%' . $userSearch . '%')
+                        ->orWhere('full_name', 'like', '%' . $userSearch . '%')
+                        ->orWhere('email', 'like', '%' . $userSearch . '%')
+                        ->orWhere('phone', 'like', '%' . $userSearch . '%')
+                        ->orWhereHas('role', fn ($roleQuery) => $roleQuery->where('role_name', 'like', '%' . $userSearch . '%'));
+                });
+            })
+            ->latest('id')
+            ->get(),
+        'roles' => Role::orderBy('role_name')->get(),
+        'userSearch' => $userSearch,
     ]);
 })->name('admin.dashboard');
 

@@ -7,15 +7,23 @@
     @vite(['resources/css/app.css'])
 </head>
 <body class="min-h-screen bg-stone-50 text-slate-950 antialiased">
+    @php
+        $dashboardRoute = $dashboardRoute ?? 'owner.dashboard';
+        $formAction = $formAction ?? route('owner.events.store');
+        $sectionLabel = $sectionLabel ?? 'Event Owner';
+        $pageTitle = $pageTitle ?? 'Add a new event';
+        $submitLabel = $submitLabel ?? 'Publish event to main page';
+    @endphp
+
     <main class="mx-auto max-w-5xl px-5 py-10 sm:px-8">
         <nav class="mb-8 flex items-center justify-between">
-            <a href="{{ route('owner.dashboard') }}" class="text-lg font-black tracking-wide">Refined Travel</a>
-            <a href="{{ route('owner.dashboard') }}" class="text-sm font-bold text-emerald-700">Back to dashboard</a>
+            <a href="{{ route($dashboardRoute) }}" class="text-lg font-black tracking-wide">Refined Travel</a>
+            <a href="{{ route($dashboardRoute) }}" class="text-sm font-bold text-emerald-700">Back to dashboard</a>
         </nav>
 
         <div class="mb-8">
-            <p class="text-sm font-black uppercase tracking-[0.24em] text-amber-700">Event Owner</p>
-            <h1 class="mt-3 text-4xl font-black">Add a new event</h1>
+            <p class="text-sm font-black uppercase tracking-[0.24em] text-amber-700">{{ $sectionLabel }}</p>
+            <h1 class="mt-3 text-4xl font-black">{{ $pageTitle }}</h1>
             <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
                 After you submit this form, the event is published to the main page automatically.
             </p>
@@ -28,7 +36,7 @@
                 </div>
             @endif
 
-            <form method="POST" action="{{ route('owner.events.store') }}" class="space-y-6">
+            <form method="POST" action="{{ $formAction }}" class="space-y-6">
                 @csrf
 
                 <div class="grid gap-5 sm:grid-cols-2">
@@ -109,7 +117,7 @@
                 </div>
 
                 <button type="submit" class="min-h-12 w-full rounded-md bg-amber-400 px-5 text-sm font-black text-slate-950 hover:bg-amber-300">
-                    Publish event to main page
+                    {{ $submitLabel }}
                 </button>
             </form>
         </section>
