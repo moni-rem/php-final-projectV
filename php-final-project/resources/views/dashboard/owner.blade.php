@@ -11,8 +11,12 @@
         <nav class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <a href="{{ url('/') }}" class="text-lg font-black tracking-wide">Refined Travel</a>
             <div class="flex flex-wrap items-center gap-3">
+                <a href="{{ route('bookings.history') }}" class="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-800 hover:bg-white">Booking history</a>
                 <a href="{{ route('owner.events.create') }}" class="inline-flex min-h-11 items-center justify-center rounded-md bg-amber-400 px-4 text-sm font-black text-slate-950 hover:bg-amber-300">Add event</a>
-                <a href="{{ route('login') }}" class="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-800 hover:bg-white">Switch role</a>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-800 hover:bg-white">Logout</button>
+                </form>
             </div>
         </nav>
 

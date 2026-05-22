@@ -25,7 +25,7 @@
         <aside class="border-b border-slate-200 bg-white lg:min-h-screen lg:border-b-0 lg:border-r">
             <div class="flex items-center justify-between px-5 py-5 lg:block lg:px-6">
                 <a href="{{ url('/') }}" class="text-lg font-black tracking-wide text-slate-950">Refined Travel</a>
-                <a href="{{ route('login') }}" class="text-sm font-bold text-emerald-700 hover:text-emerald-800 lg:hidden">Switch role</a>
+                <a href="{{ route('bookings.history') }}" class="text-sm font-bold text-emerald-700 hover:text-emerald-800 lg:hidden">Booking history</a>
             </div>
 
             <div class="px-5 pb-5 lg:px-4">
@@ -70,7 +70,7 @@
                     <p class="text-sm font-black uppercase tracking-[0.24em] text-emerald-700">Admin</p>
                     <h1 class="mt-3 text-4xl font-black leading-tight sm:text-5xl">Manage users</h1>
                     <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-                        Search, add, update, and delete user accounts from one admin workspace.
+                        Search, add, update, and approve users. Change a user role to event_owner to allow event-owner access.
                     </p>
                 </div>
                 <a href="{{ route('admin.dashboard') }}" class="inline-flex min-h-11 w-fit items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-800 hover:bg-white">Back to dashboard</a>
@@ -92,7 +92,9 @@
                 <div class="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
                     <div>
                         <h2 class="text-xl font-black">User accounts</h2>
-                        <p class="mt-1 text-sm font-semibold text-slate-500">Use the sidebar to open this user-management page any time.</p>
+                        <p class="mt-1 text-sm font-semibold text-slate-500">
+                            {{ $users->whereNotNull('owner_requested_at')->count() }} pending event owner request(s).
+                        </p>
                     </div>
                     <form method="GET" action="{{ route('admin.users.index') }}" class="flex w-full flex-col gap-2 sm:flex-row xl:max-w-md">
                         <input
@@ -151,6 +153,11 @@
                                                 <option value="{{ $role->id }}" @selected($user->role_id === $role->id)>{{ $role->role_name }}</option>
                                             @endforeach
                                         </select>
+                                        @if ($user->owner_requested_at && $user->role?->role_name !== 'event_owner')
+                                            <p class="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-700 ring-1 ring-amber-100">
+                                                Owner request pending
+                                            </p>
+                                        @endif
                                     </td>
                                     <td class="whitespace-nowrap px-5 py-4 font-semibold text-slate-600">
                                         {{ $user->bookings_count }} booking(s) / {{ $user->organized_events_count }} event(s)

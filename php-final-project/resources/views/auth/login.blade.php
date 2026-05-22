@@ -20,7 +20,7 @@
                         <p class="text-sm font-black uppercase tracking-[0.22em] text-emerald-700">Account Login</p>
                         <h1 class="mt-2 text-3xl font-black leading-tight text-slate-950">Sign in to your dashboard</h1>
                         <p class="mt-3 text-sm leading-6 text-slate-600">
-                            Use one email and password. The system will open the correct dashboard for your account role.
+                            Choose how you want to sign in, then enter the email and password for that account.
                         </p>
                     </div>
 
@@ -38,6 +38,38 @@
 
                     <form method="POST" action="{{ route('login.store') }}" class="mt-8 space-y-5">
                         @csrf
+
+                        <fieldset>
+                            <legend class="block text-sm font-bold text-slate-800">Choose role</legend>
+                            <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                                <label class="flex cursor-pointer items-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800">
+                                    <input
+                                        type="radio"
+                                        name="role"
+                                        value="user"
+                                        required
+                                        @checked(old('role', 'user') === 'user')
+                                        class="h-4 w-4 border-slate-300 text-emerald-700 focus:ring-emerald-600"
+                                    >
+                                    User
+                                </label>
+
+                                <label class="flex cursor-pointer items-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800">
+                                    <input
+                                        type="radio"
+                                        name="role"
+                                        value="event_owner"
+                                        required
+                                        @checked(old('role') === 'event_owner')
+                                        class="h-4 w-4 border-slate-300 text-emerald-700 focus:ring-emerald-600"
+                                    >
+                                    Event owner
+                                </label>
+                            </div>
+                            @error('role')
+                                <p class="mt-2 text-xs font-bold text-red-600">{{ $message }}</p>
+                            @enderror
+                        </fieldset>
 
                         <div>
                             <label for="email" class="block text-sm font-bold text-slate-800">Email address</label>
@@ -108,5 +140,7 @@
             </div>
         </section>
     </main>
+
+    @include('partials.footer')
 </body>
 </html>

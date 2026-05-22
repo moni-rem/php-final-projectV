@@ -24,7 +24,7 @@
         <aside class="border-b border-slate-200 bg-white lg:min-h-screen lg:border-b-0 lg:border-r">
             <div class="flex items-center justify-between px-5 py-5 lg:block lg:px-6">
                 <a href="{{ url('/') }}" class="text-lg font-black tracking-wide text-slate-950">Refined Travel</a>
-                <a href="{{ route('login') }}" class="text-sm font-bold text-emerald-700 hover:text-emerald-800 lg:hidden">Switch role</a>
+                <a href="{{ route('bookings.history') }}" class="text-sm font-bold text-emerald-700 hover:text-emerald-800 lg:hidden">Booking history</a>
             </div>
 
             <div class="px-5 pb-5 lg:px-4">
@@ -105,6 +105,9 @@
                         @php
                             $bookedTickets = (int) ($event->booked_tickets ?? 0);
                             $sales = (float) ($event->gross_sales ?? 0);
+                            $publisher = $event->organizer;
+                            $publisherName = $publisher?->full_name ?: $publisher?->name ?: 'Unknown publisher';
+                            $publisherEmail = $publisher?->email ?: 'No email';
                         @endphp
                         <article class="p-5">
                             <div class="grid gap-5 xl:grid-cols-[220px_1fr]">
@@ -123,6 +126,12 @@
                                             <p class="text-slate-400">Sales</p>
                                             <p class="mt-1 text-slate-950">${{ number_format($sales, 0) }}</p>
                                         </div>
+                                    </div>
+                                    <div class="mt-3 rounded-md bg-emerald-50 p-3 text-sm ring-1 ring-emerald-100">
+                                        <p class="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Published by</p>
+                                        <p class="mt-1 font-black text-slate-950">{{ $publisherName }}</p>
+                                        <p class="mt-1 break-words text-xs font-bold text-slate-600">{{ $publisherEmail }}</p>
+                                        <p class="mt-1 text-xs font-black uppercase tracking-[0.12em] text-slate-500">{{ $publisher?->role?->role_name ?? 'unknown' }}</p>
                                     </div>
                                 </div>
 

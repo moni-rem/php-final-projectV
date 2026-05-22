@@ -90,6 +90,35 @@ $allBookingViews = fn () => Booking::with(['event', 'status', 'payment', 'user']
     ->map(fn (Booking $booking) => $bookingToView($booking))
     ->all();
 
+$bookingViewsForUser = fn (User $user) => Booking::with(['event', 'status', 'payment', 'user'])
+    ->where('user_id', $user->id)
+    ->latest('booking_date')
+    ->get()
+    ->map(fn (Booking $booking) => $bookingToView($booking))
+    ->all();
+
+$requireRole = function (array $allowedRoles) {
+    if (! Auth::check()) {
+        return redirect()
+            ->route('login')
+            ->withErrors(['email' => 'Please sign in before opening that page.']);
+    }
+
+    $user = Auth::user()->loadMissing('role');
+
+    if (! in_array($user->role?->role_name, $allowedRoles, true)) {
+        abort(403, 'Your account is not approved for this area.');
+    }
+
+    return null;
+};
+
+$dashboardRouteForUser = fn (User $user) => match ($user->loadMissing('role')->role?->role_name) {
+    'admin' => 'admin.dashboard',
+    'event_owner' => 'owner.dashboard',
+    default => 'user.dashboard',
+};
+
 $createPublishedEvent = function (Request $request, User $organizer): Event {
     $validated = $request->validate([
         'title' => ['required', 'string', 'max:200'],
@@ -173,6 +202,8 @@ Route::get('/', function (Request $request) use ($allEventViews) {
             ->all();
     }
 
+    $events = array_slice($events, 0, 6, true);
+
     return view('welcome', [
         'events' => $events,
         'eventSearch' => $eventSearch,
@@ -180,33 +211,91 @@ Route::get('/', function (Request $request) use ($allEventViews) {
     ]);
 });
 
+Route::get('/events', function (Request $request) use ($allEventViews) {
+    $eventSearch = trim((string) $request->query('event_search', ''));
+    $events = $allEventViews();
+
+    if ($eventSearch !== '') {
+        $events = collect($events)
+            ->filter(function (array $event) use ($eventSearch) {
+                $haystack = strtolower(implode(' ', [
+                    $event['title'] ?? '',
+                    $event['category'] ?? '',
+                    $event['location'] ?? '',
+                    $event['description'] ?? '',
+                    $event['date'] ?? '',
+                    $event['price'] ?? '',
+                ]));
+
+                return str_contains($haystack, strtolower($eventSearch));
+            })
+            ->all();
+    }
+
+    return view('event.index', [
+        'events' => $events,
+        'eventSearch' => $eventSearch,
+        'totalEventsCount' => count($allEventViews()),
+    ]);
+})->name('events.index');
+
+Route::get('/about', function () {
+    return view('about');
+})->name('about');
+
 Route::get('/login', function () {
+    if (Auth::check()) {
+        return redirect()->route(match (Auth::user()->loadMissing('role')->role?->role_name) {
+            'admin' => 'admin.dashboard',
+            'event_owner' => 'owner.dashboard',
+            default => 'user.dashboard',
+        });
+    }
+
     return view('auth.login');
 })->name('login');
 
-Route::post('/login', function (Request $request) {
-    $credentials = $request->validate([
+Route::post('/login', function (Request $request) use ($dashboardRouteForUser) {
+    $validated = $request->validate([
+        'role' => ['required', Rule::in(['user', 'event_owner'])],
         'email' => ['required', 'email'],
         'password' => ['required', 'string'],
     ]);
 
+    $credentials = [
+        'email' => $validated['email'],
+        'password' => $validated['password'],
+    ];
+
     if (! Auth::attempt($credentials)) {
         return back()
             ->withErrors(['email' => 'The email or password is incorrect.'])
-            ->onlyInput('email');
+            ->onlyInput('email', 'role');
     }
 
     $request->session()->regenerate();
 
     $user = Auth::user()->loadMissing('role');
-    $dashboardRoute = match ($user->role?->role_name) {
-        'admin' => 'admin.dashboard',
-        'event_owner' => 'owner.dashboard',
-        default => 'user.dashboard',
-    };
+    $roleName = $user->role?->role_name;
+
+    if ($roleName !== 'admin' && $roleName !== $validated['role']) {
+        Auth::logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        $selectedRoleLabel = $validated['role'] === 'event_owner' ? 'an event owner' : 'a user';
+        $roleError = $validated['role'] === 'event_owner'
+            ? 'This account is not approved as an event owner yet. An admin must confirm it first.'
+            : 'This account is not registered as ' . $selectedRoleLabel . '. Please choose the correct role.';
+
+        return back()
+            ->withErrors(['role' => $roleError])
+            ->onlyInput('email', 'role');
+    }
 
     return redirect()
-        ->route($dashboardRoute)
+        ->route($dashboardRouteForUser($user))
         ->with('success', 'Welcome back, ' . ($user->full_name ?: $user->name) . '.');
 })->name('login.store');
 
@@ -222,11 +311,20 @@ Route::post('/logout', function (Request $request) {
 })->name('logout');
 
 Route::get('/register', function () {
+    if (Auth::check()) {
+        return redirect()->route(match (Auth::user()->loadMissing('role')->role?->role_name) {
+            'admin' => 'admin.dashboard',
+            'event_owner' => 'owner.dashboard',
+            default => 'user.dashboard',
+        });
+    }
+
     return view('auth.register');
 })->name('register');
 
 Route::post('/register', function (Request $request) {
     $validated = $request->validate([
+        'requested_role' => ['required', Rule::in(['user', 'event_owner'])],
         'name' => ['required', 'string', 'max:150'],
         'email' => ['required', 'email', 'max:255', 'unique:users,email'],
         'phone' => ['nullable', 'string', 'max:20'],
@@ -234,7 +332,8 @@ Route::post('/register', function (Request $request) {
         'terms' => ['accepted'],
     ]);
 
-    $adminRole = Role::firstOrCreate(['role_name' => 'admin']);
+    $userRole = Role::firstOrCreate(['role_name' => 'user']);
+    $requestedOwner = $validated['requested_role'] === 'event_owner';
 
     $user = User::create([
         'name' => $validated['name'],
@@ -242,39 +341,63 @@ Route::post('/register', function (Request $request) {
         'email' => $validated['email'],
         'phone' => $validated['phone'] ?? null,
         'password' => Hash::make($validated['password']),
-        'role_id' => $adminRole->id,
+        'role_id' => $userRole->id,
+        'owner_requested_at' => $requestedOwner ? now() : null,
     ]);
 
     Auth::login($user);
     $request->session()->regenerate();
 
     return redirect()
-        ->route('admin.dashboard')
-        ->with('success', 'Admin account registered successfully.');
+        ->route('user.dashboard')
+        ->with('success', $requestedOwner
+            ? 'Account created. Your event owner request was sent to admin for confirmation.'
+            : 'Account registered successfully.');
 })->name('register.store');
 
-Route::get('/dashboard/user', function () use ($allBookingViews) {
+Route::get('/dashboard/user', function () use ($bookingViewsForUser) {
+    if (! Auth::check()) {
+        return redirect()
+            ->route('login')
+            ->withErrors(['email' => 'Please sign in before opening your dashboard.']);
+    }
+
     return view('dashboard.user', [
-        'bookings' => $allBookingViews(),
+        'bookings' => $bookingViewsForUser(Auth::user()),
     ]);
 })->name('user.dashboard');
 
-Route::get('/dashboard/owner', function () {
+Route::get('/dashboard/owner', function () use ($requireRole) {
+    if ($response = $requireRole(['event_owner'])) {
+        return $response;
+    }
+
+    $owner = Auth::user();
+
     return view('dashboard.owner', [
         'events' => Event::with(['category', 'status'])
             ->withCount('bookings')
             ->withSum('bookings as booked_tickets', 'quantity')
             ->withSum('bookings as gross_sales', 'total_price')
+            ->where('organizer_id', $owner->id)
             ->orderByDesc('created_at')
             ->get(),
     ]);
 })->name('owner.dashboard');
 
-Route::get('/dashboard/owner/events/create', function () {
+Route::get('/dashboard/owner/events/create', function () use ($requireRole) {
+    if ($response = $requireRole(['event_owner'])) {
+        return $response;
+    }
+
     return view('dashboard.owner-create-event');
 })->name('owner.events.create');
 
-Route::post('/dashboard/owner/events', function (Request $request) {
+Route::post('/dashboard/owner/events', function (Request $request) use ($requireRole) {
+    if ($response = $requireRole(['event_owner'])) {
+        return $response;
+    }
+
     $validated = $request->validate([
         'title' => ['required', 'string', 'max:200'],
         'category_name' => ['required', 'string', 'max:100'],
@@ -293,17 +416,7 @@ Route::post('/dashboard/owner/events', function (Request $request) {
         'important_information' => ['nullable', 'string', 'max:2000'],
     ]);
 
-    $ownerRole = Role::firstOrCreate(['role_name' => 'event_owner']);
-    $owner = User::firstOrCreate(
-        ['email' => 'owner@example.com'],
-        [
-            'name' => 'Event Owner',
-            'full_name' => 'Event Owner',
-            'password' => Hash::make('password'),
-            'phone' => '+855 12 000 001',
-            'role_id' => $ownerRole->id,
-        ],
-    );
+    $owner = Auth::user();
 
     $category = EventCategory::firstOrCreate(['category_name' => $validated['category_name']]);
     $status = EventStatus::firstOrCreate(['status_name' => 'published']);
@@ -352,12 +465,19 @@ Route::post('/dashboard/owner/events', function (Request $request) {
         ->with('success', 'Event published to the main page.');
 })->name('owner.events.store');
 
-Route::get('/dashboard/owner/events/{event}', function (string $event) {
+Route::get('/dashboard/owner/events/{event}', function (string $event) use ($requireRole) {
+    if ($response = $requireRole(['event_owner'])) {
+        return $response;
+    }
+
+    $owner = Auth::user();
+
     $eventModel = Event::with(['category', 'status'])
         ->withCount('bookings')
         ->withSum('bookings as booked_tickets', 'quantity')
         ->withSum('bookings as gross_sales', 'total_price')
         ->where('slug', $event)
+        ->where('organizer_id', $owner->id)
         ->firstOrFail();
 
     return view('dashboard.owner-event-show', [
@@ -369,7 +489,11 @@ Route::get('/dashboard/owner/events/{event}', function (string $event) {
     ]);
 })->name('owner.events.show');
 
-Route::get('/dashboard/admin/events/create', function () {
+Route::get('/dashboard/admin/events/create', function () use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     return view('dashboard.owner-create-event', [
         'dashboardRoute' => 'admin.events.index',
         'formAction' => route('admin.events.store'),
@@ -379,7 +503,11 @@ Route::get('/dashboard/admin/events/create', function () {
     ]);
 })->name('admin.events.create');
 
-Route::post('/dashboard/admin/events', function (Request $request) use ($createPublishedEvent) {
+Route::post('/dashboard/admin/events', function (Request $request) use ($createPublishedEvent, $requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $adminRole = Role::firstOrCreate(['role_name' => 'admin']);
     $admin = Auth::user() ?? User::firstOrCreate(
         ['email' => 'admin@example.com'],
@@ -399,7 +527,11 @@ Route::post('/dashboard/admin/events', function (Request $request) use ($createP
         ->with('success', 'Admin published a new event to the website.');
 })->name('admin.events.store');
 
-Route::patch('/dashboard/admin/events/{event}', function (Request $request, Event $event) {
+Route::patch('/dashboard/admin/events/{event}', function (Request $request, Event $event) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $validated = $request->validate([
         'title' => ['required', 'string', 'max:200'],
         'category_name' => ['required', 'string', 'max:100'],
@@ -440,7 +572,11 @@ Route::patch('/dashboard/admin/events/{event}', function (Request $request, Even
         ->with('success', 'Event updated.');
 })->name('admin.events.update');
 
-Route::delete('/dashboard/admin/events/{event}', function (Event $event) {
+Route::delete('/dashboard/admin/events/{event}', function (Event $event) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $event->loadCount('bookings');
 
     if ($event->bookings_count > 0) {
@@ -456,12 +592,16 @@ Route::delete('/dashboard/admin/events/{event}', function (Event $event) {
         ->with('success', 'Event deleted.');
 })->name('admin.events.destroy');
 
-Route::get('/dashboard/admin/events', function (Request $request) {
+Route::get('/dashboard/admin/events', function (Request $request) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $eventSearch = trim((string) $request->query('event_search', ''));
 
     return view('dashboard.admin-events', [
         'adminUser' => Auth::user()?->loadMissing('role'),
-        'events' => Event::with(['category', 'status'])
+        'events' => Event::with(['category', 'status', 'organizer.role'])
             ->withCount('bookings')
             ->withSum('bookings as booked_tickets', 'quantity')
             ->withSum('bookings as gross_sales', 'total_price')
@@ -469,7 +609,12 @@ Route::get('/dashboard/admin/events', function (Request $request) {
                 $query->where(function ($query) use ($eventSearch) {
                     $query->where('title', 'like', '%' . $eventSearch . '%')
                         ->orWhere('location', 'like', '%' . $eventSearch . '%')
-                        ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery->where('category_name', 'like', '%' . $eventSearch . '%'));
+                        ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery->where('category_name', 'like', '%' . $eventSearch . '%'))
+                        ->orWhereHas('organizer', function ($organizerQuery) use ($eventSearch) {
+                            $organizerQuery->where('name', 'like', '%' . $eventSearch . '%')
+                                ->orWhere('full_name', 'like', '%' . $eventSearch . '%')
+                                ->orWhere('email', 'like', '%' . $eventSearch . '%');
+                        });
                 });
             })
             ->latest('id')
@@ -478,7 +623,11 @@ Route::get('/dashboard/admin/events', function (Request $request) {
     ]);
 })->name('admin.events.index');
 
-Route::post('/dashboard/admin/users', function (Request $request) {
+Route::post('/dashboard/admin/users', function (Request $request) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $validated = $request->validate([
         'name' => ['required', 'string', 'max:150'],
         'email' => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -501,7 +650,11 @@ Route::post('/dashboard/admin/users', function (Request $request) {
         ->with('success', 'User account created.');
 })->name('admin.users.store');
 
-Route::patch('/dashboard/admin/users/{user}', function (Request $request, User $user) {
+Route::patch('/dashboard/admin/users/{user}', function (Request $request, User $user) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $validated = $request->validate([
         'name' => ['required', 'string', 'max:150'],
         'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
@@ -518,6 +671,12 @@ Route::patch('/dashboard/admin/users/{user}', function (Request $request, User $
         'role_id' => $validated['role_id'],
     ];
 
+    $selectedRole = Role::find($validated['role_id']);
+
+    if ($selectedRole?->role_name === 'event_owner') {
+        $attributes['owner_requested_at'] = null;
+    }
+
     if (! empty($validated['password'])) {
         $attributes['password'] = Hash::make($validated['password']);
     }
@@ -529,7 +688,11 @@ Route::patch('/dashboard/admin/users/{user}', function (Request $request, User $
         ->with('success', 'User account updated.');
 })->name('admin.users.update');
 
-Route::delete('/dashboard/admin/users/{user}', function (User $user) {
+Route::delete('/dashboard/admin/users/{user}', function (User $user) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $user->loadCount(['bookings', 'organizedEvents']);
 
     if ($user->bookings_count > 0 || $user->organized_events_count > 0) {
@@ -551,7 +714,11 @@ Route::delete('/dashboard/admin/users/{user}', function (User $user) {
         ->with('success', 'User account deleted.');
 })->name('admin.users.destroy');
 
-Route::get('/dashboard/admin/users', function (Request $request) {
+Route::get('/dashboard/admin/users', function (Request $request) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $userSearch = trim((string) $request->query('user_search', ''));
 
     return view('dashboard.admin-users', [
@@ -575,7 +742,11 @@ Route::get('/dashboard/admin/users', function (Request $request) {
     ]);
 })->name('admin.users.index');
 
-Route::get('/dashboard/admin', function (Request $request) use ($allEventViews, $allBookingViews) {
+Route::get('/dashboard/admin', function (Request $request) use ($allEventViews, $allBookingViews, $requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
     $userSearch = trim((string) $request->query('user_search', ''));
 
     return view('dashboard.admin', [
@@ -601,9 +772,15 @@ Route::get('/dashboard/admin', function (Request $request) use ($allEventViews, 
     ]);
 })->name('admin.dashboard');
 
-Route::get('/booking-history', function () use ($allBookingViews) {
+Route::get('/booking-history', function () use ($bookingViewsForUser) {
+    if (! Auth::check()) {
+        return redirect()
+            ->route('login')
+            ->withErrors(['email' => 'Please sign in before opening your booking history.']);
+    }
+
     return view('event.history', [
-        'bookings' => $allBookingViews(),
+        'bookings' => $bookingViewsForUser(Auth::user()),
     ]);
 })->name('bookings.history');
 
@@ -632,7 +809,13 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
         'terms' => ['accepted'],
     ]);
 
-    DB::transaction(function () use ($request, $validated, $eventModel) {
+    if (! Auth::check() && User::where('email', $validated['email'])->exists()) {
+        return back()
+            ->withErrors(['email' => 'This email already has an account. Please log in before booking.'])
+            ->withInput();
+    }
+
+    $bookingUser = DB::transaction(function () use ($request, $validated, $eventModel) {
         $userRole = Role::firstOrCreate(['role_name' => 'user']);
         $bookingStatus = BookingStatus::firstOrCreate(['status_name' => 'pending']);
         $paymentMethod = PaymentMethod::firstOrCreate(['method_name' => 'KHQR']);
@@ -642,16 +825,27 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
         $unitPrice = (float) $eventModel->ticket_price;
         $totalPrice = $unitPrice * $quantity;
 
-        $user = User::updateOrCreate(
-            ['email' => $validated['email']],
-            [
+        $user = Auth::user();
+
+        if ($user) {
+            $user->update([
                 'name' => $fullName,
                 'full_name' => $fullName,
-                'password' => Hash::make('password'),
                 'phone' => $validated['phone'],
-                'role_id' => $userRole->id,
-            ],
-        );
+            ]);
+        } else {
+            $user = User::firstOrNew(['email' => $validated['email']]);
+            $user->name = $fullName;
+            $user->full_name = $fullName;
+            $user->phone = $validated['phone'];
+
+            if (! $user->exists) {
+                $user->password = Hash::make('password');
+                $user->role_id = $userRole->id;
+            }
+
+            $user->save();
+        }
 
         $booking = Booking::create([
             'booking_code' => 'BK-' . strtoupper(Str::random(8)),
@@ -681,7 +875,14 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
                 'qr_code' => $booking->booking_code . '-' . $i,
             ]);
         }
+
+        return $user;
     });
+
+    if (! Auth::check()) {
+        Auth::login($bookingUser);
+        $request->session()->regenerate();
+    }
 
     return redirect()
         ->route('bookings.history')

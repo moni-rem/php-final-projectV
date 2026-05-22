@@ -13,7 +13,14 @@
             <div class="flex items-center gap-4 text-sm font-bold">
                 <a href="{{ url('/') }}" class="text-slate-600 hover:text-slate-950">Home</a>
                 <a href="{{ route('bookings.history') }}" class="text-slate-600 hover:text-slate-950">Booking history</a>
-                <a href="{{ route('login') }}" class="rounded-md border border-slate-300 px-4 py-2 text-slate-800 hover:bg-slate-100">Login</a>
+                @auth
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="rounded-md border border-slate-300 px-4 py-2 text-slate-800 hover:bg-slate-100">Logout</button>
+                    </form>
+                @else
+                    <a href="{{ route('login') }}" class="rounded-md border border-slate-300 px-4 py-2 text-slate-800 hover:bg-slate-100">Login</a>
+                @endauth
             </div>
         </nav>
     </header>
@@ -132,5 +139,7 @@
             </div>
         </section>
     </main>
+
+    @include('partials.footer')
 </body>
 </html>

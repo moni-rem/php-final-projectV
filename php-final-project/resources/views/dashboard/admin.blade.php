@@ -32,7 +32,7 @@
         <aside class="border-b border-slate-200 bg-white lg:min-h-screen lg:border-b-0 lg:border-r">
             <div class="flex items-center justify-between px-5 py-5 lg:block lg:px-6">
                 <a href="{{ url('/') }}" class="text-lg font-black tracking-wide text-slate-950">Refined Travel</a>
-                <a href="{{ route('login') }}" class="text-sm font-bold text-emerald-700 hover:text-emerald-800 lg:hidden">Switch role</a>
+                <a href="{{ route('bookings.history') }}" class="text-sm font-bold text-emerald-700 hover:text-emerald-800 lg:hidden">Booking history</a>
             </div>
 
             <div class="px-5 pb-5 lg:px-4">
@@ -67,7 +67,6 @@
                 <div class="rounded-lg bg-emerald-50 p-5 ring-1 ring-emerald-100">
                     <p class="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Admin Account</p>
                     <p class="mt-2 text-sm font-bold text-slate-700">Review users, events, and ticket activity from one dashboard.</p>
-                    <a href="{{ route('login') }}" class="mt-4 inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-black text-white hover:bg-emerald-800">Switch role</a>
                 </div>
             </div>
         </aside>
@@ -82,7 +81,7 @@
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-3">
-                    <a href="{{ route('register') }}" class="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-800 hover:bg-white">Add admin</a>
+                    <a href="{{ route('admin.users.index') }}" class="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-800 hover:bg-white">Manage users</a>
                     <a href="{{ route('admin.events.create') }}" class="inline-flex min-h-11 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-black text-white hover:bg-emerald-800">Add event</a>
                     <a href="{{ url('/') }}" class="inline-flex min-h-11 items-center justify-center rounded-md bg-amber-400 px-4 text-sm font-black text-slate-950 hover:bg-amber-300">View site</a>
                 </div>

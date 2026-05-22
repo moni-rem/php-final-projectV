@@ -18,9 +18,9 @@
                 <div class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
                     <div>
                         <p class="text-sm font-black uppercase tracking-[0.22em] text-emerald-700">Register</p>
-                        <h2 class="mt-2 text-3xl font-black text-slate-950">Create an admin account</h2>
+                        <h2 class="mt-2 text-3xl font-black text-slate-950">Create your account</h2>
                         <p class="mt-3 text-sm leading-6 text-slate-600">
-                            Register with administrator access to review users, bookings, events, and platform activity.
+                            Register as a user, or request event owner access for admin confirmation.
                         </p>
                     </div>
 
@@ -32,6 +32,39 @@
 
                     <form method="POST" action="{{ route('register.store') }}" class="mt-8 space-y-5">
                         @csrf
+
+                        <fieldset>
+                            <legend class="block text-sm font-bold text-slate-800">Register as</legend>
+                            <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                                <label class="flex cursor-pointer items-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800">
+                                    <input
+                                        type="radio"
+                                        name="requested_role"
+                                        value="user"
+                                        required
+                                        @checked(old('requested_role', 'user') === 'user')
+                                        class="h-4 w-4 border-slate-300 text-emerald-700 focus:ring-emerald-600"
+                                    >
+                                    User
+                                </label>
+
+                                <label class="flex cursor-pointer items-center gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 transition has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800">
+                                    <input
+                                        type="radio"
+                                        name="requested_role"
+                                        value="event_owner"
+                                        required
+                                        @checked(old('requested_role') === 'event_owner')
+                                        class="h-4 w-4 border-slate-300 text-emerald-700 focus:ring-emerald-600"
+                                    >
+                                    Event owner
+                                </label>
+                            </div>
+                            <p class="mt-2 text-xs font-bold text-slate-500">Event owner accounts need admin confirmation before they can manage events.</p>
+                            @error('requested_role')
+                                <p class="mt-2 text-xs font-bold text-red-600">{{ $message }}</p>
+                            @enderror
+                        </fieldset>
 
                         <div>
                             <label for="name" class="block text-sm font-bold text-slate-800">Full name</label>
@@ -114,7 +147,7 @@
 
                         <label class="flex items-start gap-3 text-sm font-semibold leading-6 text-slate-700">
                             <input type="checkbox" name="terms" required class="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600">
-                            I agree to create an admin account for this website.
+                            I agree to create an account for this website.
                         </label>
                         @error('terms')
                             <p class="-mt-3 text-xs font-bold text-red-600">{{ $message }}</p>
@@ -124,12 +157,12 @@
                             type="submit"
                             class="min-h-12 w-full rounded-md bg-emerald-700 px-5 text-sm font-black text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300"
                         >
-                            Register as admin
+                            Register
                         </button>
                     </form>
 
                     <p class="mt-7 text-center text-sm font-semibold text-slate-600">
-                        Already have an admin account?
+                        Already have an account?
                         <a href="{{ route('login') }}" class="font-black text-emerald-700 hover:text-emerald-800">Sign in</a>
                     </p>
                 </div>
@@ -146,14 +179,16 @@
             <div class="relative z-10 flex h-full flex-col justify-between p-10 text-white">
                 <a href="{{ url('/') }}" class="text-lg font-black tracking-wide">Refined Travel</a>
                 <div class="max-w-xl">
-                    <p class="text-sm font-black uppercase tracking-[0.28em] text-amber-300">Admin access</p>
-                    <h1 class="mt-4 text-5xl font-black leading-tight">Keep the event platform organized.</h1>
+                    <p class="text-sm font-black uppercase tracking-[0.28em] text-amber-300">Join the platform</p>
+                    <h1 class="mt-4 text-5xl font-black leading-tight">Book events or request to host them.</h1>
                     <p class="mt-5 text-base leading-7 text-white/82">
-                        Review accounts, bookings, events, and the activity that keeps the website running.
+                        User accounts are ready right away. Event owner access starts after admin confirmation.
                     </p>
                 </div>
             </div>
         </section>
     </main>
+
+    @include('partials.footer')
 </body>
 </html>

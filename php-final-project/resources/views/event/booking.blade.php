@@ -9,11 +9,18 @@
 <body class="min-h-screen bg-stone-50 text-slate-950 antialiased">
     <header class="border-b border-slate-200 bg-white">
         <nav class="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-            <a href="{{ url('/') }}" class="text-lg font-black tracking-wide text-slate-950">Refined Travel</a>
+            <a href="{{ url('/') }}" class="text-lg font-black tracking-wide text-slate-950">Refined Events</a>
             <div class="flex items-center gap-4 text-sm font-bold">
                 <a href="{{ route('events.show', $slug) }}" class="text-slate-600 hover:text-slate-950">Event detail</a>
                 <a href="{{ route('bookings.history') }}" class="text-slate-600 hover:text-slate-950">Booking history</a>
-                <a href="{{ route('login') }}" class="rounded-md border border-slate-300 px-4 py-2 text-slate-800 hover:bg-slate-100">Login</a>
+                @auth
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="rounded-md border border-slate-300 px-4 py-2 text-slate-800 hover:bg-slate-100">Logout</button>
+                    </form>
+                @else
+                    <a href="{{ route('login') }}" class="rounded-md border border-slate-300 px-4 py-2 text-slate-800 hover:bg-slate-100">Login</a>
+                @endauth
             </div>
         </nav>
     </header>
@@ -104,9 +111,14 @@
                             </div>
 
                             <div class="w-full max-w-[240px] shrink-0 self-center rounded-lg bg-white p-4 text-center shadow-sm ring-1 ring-slate-200">
-                                <img src="{{ asset('images/khqr-placeholder.svg') }}" alt="KHQR payment code" class="mx-auto h-48 w-48 object-contain">
+                                <button type="button" data-khqr-open class="group block w-full rounded-md outline-none transition focus:ring-2 focus:ring-emerald-300">
+                                    <img src="{{ asset('images/khqr-placeholder.svg') }}" alt="KHQR payment code" class="mx-auto h-48 w-48 object-contain transition group-hover:scale-[1.03]">
+                                </button>
                                 <p class="mt-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Scan to pay</p>
                                 <p class="mt-1 text-sm font-black text-slate-950">{{ $event['price'] }}</p>
+                                <button type="button" data-khqr-open class="mt-4 min-h-11 w-full rounded-md bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-300">
+                                    Open KHQR
+                                </button>
                             </div>
                         </div>
                     </section>
@@ -167,5 +179,76 @@
             </aside>
         </div>
     </main>
+
+    @include('partials.footer')
+
+    <div id="khqr-modal" class="fixed inset-0 z-50 hidden items-center justify-center px-5 py-8" aria-hidden="true">
+        <button type="button" data-khqr-close class="absolute inset-0 bg-slate-950/65 backdrop-blur-sm" aria-label="Close KHQR popup"></button>
+
+        <section role="dialog" aria-modal="true" aria-labelledby="khqr-modal-title" class="relative w-full max-w-sm overflow-hidden rounded-lg bg-white shadow-2xl ring-1 ring-slate-200">
+            <div class="bg-red-600 px-5 py-4 text-white">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase tracking-[0.2em] text-red-100">Demo Payment</p>
+                        <h2 id="khqr-modal-title" class="mt-1 text-2xl font-black">KHQR</h2>
+                    </div>
+                    <button type="button" data-khqr-close class="flex h-10 w-10 items-center justify-center rounded-md bg-white/15 text-2xl font-black leading-none text-white transition hover:bg-white/25 focus:outline-none focus:ring-2 focus:ring-white/60" aria-label="Close KHQR popup">
+                        &times;
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-6 text-center">
+                <div class="mx-auto w-full max-w-[260px] rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <img src="{{ asset('images/khqr-placeholder.svg') }}" alt="Large KHQR payment code" class="mx-auto h-56 w-56 object-contain">
+                </div>
+
+                <p class="mt-5 text-xs font-black uppercase tracking-[0.18em] text-slate-400">Amount</p>
+                <p class="mt-1 text-3xl font-black text-slate-950">{{ $event['price'] }}</p>
+                <p class="mt-3 text-sm font-semibold leading-6 text-slate-600">
+                    Scan this demo KHQR, then enter your transaction reference in the form.
+                </p>
+
+                <button type="button" data-khqr-close class="mt-6 min-h-12 w-full rounded-md bg-emerald-700 px-5 text-sm font-black text-white transition hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                    Done scanning
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        (() => {
+            const modal = document.getElementById('khqr-modal');
+            const openButtons = document.querySelectorAll('[data-khqr-open]');
+            const closeButtons = document.querySelectorAll('[data-khqr-close]');
+
+            if (!modal || openButtons.length === 0) {
+                return;
+            }
+
+            const openModal = () => {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                modal.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('overflow-hidden');
+            };
+
+            const closeModal = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                modal.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('overflow-hidden');
+            };
+
+            openButtons.forEach((button) => button.addEventListener('click', openModal));
+            closeButtons.forEach((button) => button.addEventListener('click', closeModal));
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
+                    closeModal();
+                }
+            });
+        })();
+    </script>
 </body>
 </html>
