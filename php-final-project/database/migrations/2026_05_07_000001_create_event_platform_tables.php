@@ -88,6 +88,7 @@ return new class extends Migration
             $table->foreignId('event_id')->constrained('events');
             $table->foreignId('booking_status_id')->constrained('booking_statuses');
             $table->timestamp('booking_date')->useCurrent();
+            $table->string('ticket_type', 50)->default('Standard');
             $table->unsignedInteger('quantity');
             $table->decimal('unit_price', 10, 2);
             $table->decimal('total_price', 10, 2);

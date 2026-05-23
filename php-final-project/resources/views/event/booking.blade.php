@@ -34,9 +34,9 @@
             </p>
         </div>
 
-        <div class="grid gap-8 lg:grid-cols-[1fr_380px]">
+        <div class="grid items-start justify-center gap-8 lg:grid-cols-[minmax(0,380px)_minmax(0,380px)]">
             <section class="rounded-lg bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
-                <h2 class="text-2xl font-black text-slate-950">Attendee Information</h2>
+                <h2 class="text-2xl font-black text-slate-950">Confirm Your Booking</h2>
 
                 <form method="POST" action="{{ route('events.booking.store', $slug) }}" enctype="multipart/form-data" class="mt-8 space-y-6">
                     @csrf
@@ -90,7 +90,7 @@
                     </div>
 
                     <section class="rounded-lg border border-slate-200 bg-stone-50 p-5">
-                        <div class="flex flex-col gap-5 lg:flex-row lg:items-start">
+                        <div class="flex flex-col gap-5">
                             <div class="flex-1">
                                 <p class="text-sm font-black uppercase tracking-[0.22em] text-emerald-700">Payment Method</p>
                                 <h3 class="mt-2 text-2xl font-black text-slate-950">Pay by KHQR</h3>
@@ -134,8 +134,8 @@
                 </form>
             </section>
 
-            <aside class="space-y-6">
-                <section class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-slate-200">
+            <aside class="w-full space-y-6 lg:order-last">
+                <section class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-slate-200 lg:sticky lg:top-8">
                     <img src="{{ $event['image'] }}" alt="{{ $event['title'] }}" class="h-52 w-full object-cover">
                     <div class="p-6">
                         <p class="text-sm font-black uppercase tracking-[0.22em] text-emerald-700">{{ $event['category'] }}</p>

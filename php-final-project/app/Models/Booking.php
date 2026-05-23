@@ -12,6 +12,7 @@ class Booking extends Model
         'event_id',
         'booking_status_id',
         'booking_date',
+        'ticket_type',
         'quantity',
         'unit_price',
         'total_price',

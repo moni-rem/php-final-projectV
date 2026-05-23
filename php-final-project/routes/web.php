@@ -50,6 +50,11 @@ $bookingToView = function (Booking $booking): array {
     $user = $booking->user;
     $fullName = trim($user?->full_name ?: $user?->name ?: 'Guest User');
     $nameParts = preg_split('/\s+/', $fullName, 2);
+    $payment = $booking->payment;
+    $currency = $payment?->currency ?? 'USD';
+    $formattedPrice = $currency === 'KHR'
+        ? number_format((float) $booking->unit_price, 0) . ' ៛'
+        : '$' . number_format((float) $booking->unit_price, 2);
 
     return [
         'code' => $booking->booking_code,
@@ -64,12 +69,12 @@ $bookingToView = function (Booking $booking): array {
             ' -',
         ),
         'event_location' => $event->location,
-        'event_price' => '$' . number_format((float) $booking->unit_price, 2),
+        'event_price' => $formattedPrice,
         'first_name' => $nameParts[0] ?? $fullName,
         'last_name' => $nameParts[1] ?? '',
         'email' => $user?->email,
         'phone' => $user?->phone,
-        'ticket_type' => 'Standard',
+        'ticket_type' => $booking->ticket_type ?? 'Standard',
         'quantity' => $booking->quantity,
         'payment_reference' => $booking->payment?->transaction_reference ?? 'Pending',
         'payment_proof_name' => $booking->payment?->payment_proof ? basename($booking->payment->payment_proof) : null,
@@ -803,6 +808,7 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
         'phone' => ['required', 'string', 'max:40'],
         'ticket_type' => ['required', 'string', 'max:40'],
         'quantity' => ['required', 'integer', 'min:1', 'max:10'],
+        'currency' => ['required', 'string', 'in:USD,KHR'],
         'notes' => ['nullable', 'string', 'max:1000'],
         'payment_reference' => ['required', 'string', 'max:120'],
         'payment_proof' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
@@ -821,9 +827,27 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
         $paymentMethod = PaymentMethod::firstOrCreate(['method_name' => 'KHQR']);
         $paymentStatus = PaymentStatus::firstOrCreate(['status_name' => 'review']);
         $fullName = trim($validated['first_name'] . ' ' . $validated['last_name']);
+        
         $quantity = (int) $validated['quantity'];
-        $unitPrice = (float) $eventModel->ticket_price;
-        $totalPrice = $unitPrice * $quantity;
+        $ticketType = $validated['ticket_type'];
+        $currency = $validated['currency'] ?? 'USD';
+
+        $basePriceUsd = (float) $eventModel->ticket_price;
+        $unitPriceUsd = $basePriceUsd;
+
+        if (strcasecmp($ticketType, 'VIP') === 0) {
+            $unitPriceUsd *= 1.5;
+        } elseif (strcasecmp($ticketType, 'Group') === 0) {
+            $unitPriceUsd *= 0.9;
+        }
+
+        if ($currency === 'KHR') {
+            $unitPrice = round($unitPriceUsd * 4100, 2);
+            $totalPrice = $unitPrice * $quantity;
+        } else {
+            $unitPrice = round($unitPriceUsd, 2);
+            $totalPrice = $unitPrice * $quantity;
+        }
 
         $user = Auth::user();
 
@@ -852,6 +876,7 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
             'user_id' => $user->id,
             'event_id' => $eventModel->id,
             'booking_status_id' => $bookingStatus->id,
+            'ticket_type' => $ticketType,
             'quantity' => $quantity,
             'unit_price' => $unitPrice,
             'total_price' => $totalPrice,
@@ -863,7 +888,7 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
             'payment_method_id' => $paymentMethod->id,
             'payment_status_id' => $paymentStatus->id,
             'paid_amount' => $totalPrice,
-            'currency' => 'USD',
+            'currency' => $currency,
             'transaction_reference' => $validated['payment_reference'],
             'payment_proof' => $proofPath,
         ]);
