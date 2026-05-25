@@ -10,6 +10,8 @@ use App\Models\PaymentStatus;
 use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Http\Controllers\BakongKhqrController;
+use App\Services\BakongKhqrService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -17,6 +19,26 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
+
+$calculateTicketAmount = function (Event $event, string $ticketType, int $quantity, string $currency = 'USD'): array {
+    $unitPriceUsd = (float) $event->ticket_price;
+
+    if (strcasecmp($ticketType, 'VIP') === 0) {
+        $unitPriceUsd *= 1.5;
+    } elseif (strcasecmp($ticketType, 'Group') === 0) {
+        $unitPriceUsd *= 0.9;
+    }
+
+    if ($currency === 'KHR') {
+        $unitPrice = round($unitPriceUsd * 4100, 2);
+        $totalPrice = $unitPrice * $quantity;
+    } else {
+        $unitPrice = round($unitPriceUsd, 2);
+        $totalPrice = $unitPrice * $quantity;
+    }
+
+    return [$unitPrice, $totalPrice];
+};
 
 $eventToView = function (Event $event): array {
     $event->loadMissing('category');
@@ -798,7 +820,9 @@ Route::get('/events/{event}/booking', function (string $event) use ($eventToView
     ]);
 })->name('events.booking');
 
-Route::post('/events/{event}/booking', function (Request $request, string $event) {
+Route::post('/events/{event}/khqr', [BakongKhqrController::class, 'generate'])->name('events.booking.khqr');
+
+Route::post('/events/{event}/booking', function (Request $request, string $event) use ($calculateTicketAmount) {
     $eventModel = Event::where('slug', $event)->firstOrFail();
 
     $validated = $request->validate([
@@ -810,10 +834,21 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
         'quantity' => ['required', 'integer', 'min:1', 'max:10'],
         'currency' => ['required', 'string', 'in:USD,KHR'],
         'notes' => ['nullable', 'string', 'max:1000'],
-        'payment_reference' => ['required', 'string', 'max:120'],
+        'payment_reference' => ['nullable', 'string', 'max:120'],
+        'khqr_md5' => ['nullable', 'string', 'max:100'],
+        'khqr_transaction_id' => ['nullable', 'string', 'max:150'],
+        'khqr_external_reference' => ['nullable', 'string', 'max:150'],
+        'khqr_qr_string' => ['nullable', 'string', 'max:2000'],
+        'khqr_qr_image_url' => ['nullable', 'url', 'max:255'],
         'payment_proof' => ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:4096'],
         'terms' => ['accepted'],
     ]);
+
+    if (blank($validated['payment_reference'] ?? null) && blank($validated['khqr_md5'] ?? null)) {
+        return back()
+            ->withErrors(['payment_reference' => 'Please generate a KHQR payment or enter your transaction reference.'])
+            ->withInput();
+    }
 
     if (! Auth::check() && User::where('email', $validated['email'])->exists()) {
         return back()
@@ -821,33 +856,19 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
             ->withInput();
     }
 
-    $bookingUser = DB::transaction(function () use ($request, $validated, $eventModel) {
+    $khqrCheck = app(BakongKhqrService::class)->checkByMd5($validated['khqr_md5'] ?? null);
+
+    $bookingUser = DB::transaction(function () use ($request, $validated, $eventModel, $calculateTicketAmount, $khqrCheck) {
         $userRole = Role::firstOrCreate(['role_name' => 'user']);
-        $bookingStatus = BookingStatus::firstOrCreate(['status_name' => 'pending']);
+        $bookingStatus = BookingStatus::firstOrCreate(['status_name' => $khqrCheck['paid'] ? 'confirmed' : 'pending']);
         $paymentMethod = PaymentMethod::firstOrCreate(['method_name' => 'KHQR']);
-        $paymentStatus = PaymentStatus::firstOrCreate(['status_name' => 'review']);
+        $paymentStatus = PaymentStatus::firstOrCreate(['status_name' => $khqrCheck['paid'] ? 'paid' : 'review']);
         $fullName = trim($validated['first_name'] . ' ' . $validated['last_name']);
         
         $quantity = (int) $validated['quantity'];
         $ticketType = $validated['ticket_type'];
         $currency = $validated['currency'] ?? 'USD';
-
-        $basePriceUsd = (float) $eventModel->ticket_price;
-        $unitPriceUsd = $basePriceUsd;
-
-        if (strcasecmp($ticketType, 'VIP') === 0) {
-            $unitPriceUsd *= 1.5;
-        } elseif (strcasecmp($ticketType, 'Group') === 0) {
-            $unitPriceUsd *= 0.9;
-        }
-
-        if ($currency === 'KHR') {
-            $unitPrice = round($unitPriceUsd * 4100, 2);
-            $totalPrice = $unitPrice * $quantity;
-        } else {
-            $unitPrice = round($unitPriceUsd, 2);
-            $totalPrice = $unitPrice * $quantity;
-        }
+        [$unitPrice, $totalPrice] = $calculateTicketAmount($eventModel, $ticketType, $quantity, $currency);
 
         $user = Auth::user();
 
@@ -889,7 +910,13 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
             'payment_status_id' => $paymentStatus->id,
             'paid_amount' => $totalPrice,
             'currency' => $currency,
-            'transaction_reference' => $validated['payment_reference'],
+            'transaction_reference' => $validated['payment_reference'] ?: ($validated['khqr_transaction_id'] ?? $validated['khqr_external_reference'] ?? null),
+            'khqr_md5' => $validated['khqr_md5'] ?? null,
+            'khqr_transaction_id' => $validated['khqr_transaction_id'] ?? null,
+            'khqr_external_reference' => $validated['khqr_external_reference'] ?? null,
+            'khqr_qr_string' => $validated['khqr_qr_string'] ?? null,
+            'khqr_qr_image_url' => $validated['khqr_qr_image_url'] ?? null,
+            'khqr_checked_at' => filled($validated['khqr_md5'] ?? null) ? now() : null,
             'payment_proof' => $proofPath,
         ]);
 
@@ -911,7 +938,9 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
 
     return redirect()
         ->route('bookings.history')
-        ->with('success', 'Booking saved to the database. Your ticket is non-refundable and cannot be returned or canceled.');
+        ->with('success', $khqrCheck['paid']
+            ? 'Payment confirmed by KHQR. Your booking is confirmed and saved.'
+            : 'Booking saved. KHQR payment is waiting for review, so please keep your transaction reference/proof.');
 })->name('events.booking.store');
 
 Route::get('/events/{event}', function (string $event) use ($eventToView) {

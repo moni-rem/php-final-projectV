@@ -13,6 +13,12 @@ class Payment extends Model
         'paid_amount',
         'currency',
         'transaction_reference',
+        'khqr_md5',
+        'khqr_transaction_id',
+        'khqr_external_reference',
+        'khqr_qr_string',
+        'khqr_qr_image_url',
+        'khqr_checked_at',
         'payment_proof',
         'payment_date',
     ];
@@ -22,6 +28,7 @@ class Payment extends Model
         return [
             'paid_amount' => 'decimal:2',
             'payment_date' => 'datetime',
+            'khqr_checked_at' => 'datetime',
         ];
     }
 

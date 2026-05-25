@@ -77,11 +77,17 @@
             <form method="POST"
                   action="{{ route('events.booking.store', $slug) }}"
                   enctype="multipart/form-data"
+                  data-khqr-url="{{ route('events.booking.khqr', $slug) }}"
                   class="space-y-6">
 
                 @csrf
 
-                <input type="hidden" name="currency" value="USD">
+                <input type="hidden" name="currency" value="KHR">
+                <input type="hidden" name="khqr_md5" data-khqr-md5>
+                <input type="hidden" name="khqr_transaction_id" data-khqr-transaction-id>
+                <input type="hidden" name="khqr_external_reference" data-khqr-external-reference>
+                <input type="hidden" name="khqr_qr_string" data-khqr-string>
+                <input type="hidden" name="khqr_qr_image_url" data-khqr-image-url>
 
                 @if ($errors->any())
                     <div class="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
@@ -235,7 +241,12 @@
                             </h3>
 
                             <p class="mt-3 text-sm leading-6 text-slate-600">
-                                Scan the KHQR code and complete the payment.
+                                Scan the generated KHQR code for this ticket amount. If the payment cannot be verified automatically, enter your transaction reference for admin review.
+                            </p>
+
+                            <p class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-5 text-amber-800"
+                               data-khqr-status>
+                                Preparing KHQR payment code...
                             </p>
 
                             <div class="mt-5 grid grid-cols-1 gap-4">
@@ -249,7 +260,6 @@
                                         id="payment_reference"
                                         name="payment_reference"
                                         type="text"
-                                        required
                                         placeholder="KHQR Transaction ID"
                                         class="mt-2 h-12 w-full rounded-lg border border-slate-300 px-4 font-semibold focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100">
                                 </div>
@@ -279,6 +289,7 @@
                                 <img
                                     src="{{ $khqrImageUrl }}"
                                     alt="KHQR payment code"
+                                    data-khqr-image
                                     class="mx-auto h-48 w-48 object-contain">
                             </button>
 
@@ -407,6 +418,167 @@
 </main>
 
 @include('partials.footer')
+
+<div class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 px-4 py-8"
+     data-khqr-modal>
+    <div class="w-full max-w-sm rounded-2xl bg-white p-5 text-center shadow-2xl">
+        <div class="flex items-center justify-between gap-4">
+            <p class="text-sm font-black uppercase tracking-[0.18em] text-emerald-700">Scan KHQR</p>
+            <button type="button"
+                    class="rounded-md border border-slate-300 px-3 py-2 text-sm font-black text-slate-700"
+                    data-khqr-close>
+                Close
+            </button>
+        </div>
+
+        <img src="{{ $khqrImageUrl }}"
+             alt="Large KHQR payment code"
+             data-khqr-modal-image
+             class="mx-auto mt-5 h-80 w-80 rounded-xl border border-slate-200 bg-white object-contain p-3">
+
+        <p class="mt-4 text-sm font-bold leading-6 text-slate-600">
+            Increase your phone brightness and scan this larger code from your banking app.
+        </p>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.querySelector('form[data-khqr-url]');
+
+        if (! form) {
+            return;
+        }
+
+        const ticketType = form.querySelector('[name="ticket_type"]');
+        const quantity = form.querySelector('[name="quantity"]');
+        const currency = form.querySelector('[name="currency"]');
+        const csrf = form.querySelector('[name="_token"]');
+        const image = form.querySelector('[data-khqr-image]');
+        const modal = document.querySelector('[data-khqr-modal]');
+        const modalImage = document.querySelector('[data-khqr-modal-image]');
+        const amount = form.querySelector('[data-payment-amount]');
+        const status = form.querySelector('[data-khqr-status]');
+        const hidden = {
+            md5: form.querySelector('[data-khqr-md5]'),
+            transactionId: form.querySelector('[data-khqr-transaction-id]'),
+            externalReference: form.querySelector('[data-khqr-external-reference]'),
+            qrString: form.querySelector('[data-khqr-string]'),
+            imageUrl: form.querySelector('[data-khqr-image-url]'),
+        };
+        const fallbackImage = image?.getAttribute('src') || '';
+        let timer;
+
+        const clearKhqr = () => {
+            Object.values(hidden).forEach((input) => {
+                if (input) {
+                    input.value = '';
+                }
+            });
+        };
+
+        const loadKhqr = async () => {
+            clearKhqr();
+
+            if (status) {
+                status.textContent = 'Generating KHQR payment code...';
+            }
+
+            try {
+                const response = await fetch(form.dataset.khqrUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrf?.value || '',
+                    },
+                    body: JSON.stringify({
+                        ticket_type: ticketType?.value || 'Standard',
+                        quantity: quantity?.value || 1,
+                        currency: currency?.value || 'USD',
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (amount && data.formatted_amount) {
+                    amount.textContent = data.formatted_amount;
+                }
+
+                if (! data.configured) {
+                    if (image) {
+                        image.src = fallbackImage;
+                    }
+
+                    if (status) {
+                        status.textContent = data.message || 'KHQR gateway is not configured yet.';
+                    }
+
+                    return;
+                }
+
+                hidden.md5.value = data.md5 || '';
+                hidden.transactionId.value = data.transaction_id || '';
+                hidden.externalReference.value = data.external_reference || '';
+                hidden.qrString.value = data.qr_string || '';
+                hidden.imageUrl.value = data.qr_image_url || '';
+
+                if (image && data.qr_image_url) {
+                    image.src = data.qr_image_url;
+                }
+
+                if (modalImage && data.qr_image_url) {
+                    modalImage.src = data.qr_image_url;
+                }
+
+                if (status) {
+                    status.textContent = 'KHQR code generated. Scan it, pay the exact amount, then confirm your booking.';
+                }
+            } catch (error) {
+                if (image) {
+                    image.src = fallbackImage;
+                }
+
+                if (status) {
+                    status.textContent = 'Could not generate KHQR automatically. Enter your transaction reference after paying.';
+                }
+            }
+        };
+
+        const scheduleKhqrLoad = () => {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(loadKhqr, 250);
+        };
+
+        ticketType?.addEventListener('change', scheduleKhqrLoad);
+        quantity?.addEventListener('input', scheduleKhqrLoad);
+
+        document.querySelectorAll('[data-khqr-open]').forEach((button) => {
+            button.addEventListener('click', () => {
+                if (modal) {
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                }
+            });
+        });
+
+        document.querySelector('[data-khqr-close]')?.addEventListener('click', () => {
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        });
+
+        modal?.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        });
+
+        loadKhqr();
+    });
+</script>
 
 </body>
 </html>
