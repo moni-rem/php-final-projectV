@@ -40,10 +40,18 @@
         @endif
 
         @php
+            $toRiels = function ($amount, $currency = 'USD') {
+                return strtoupper((string) $currency) === 'KHR'
+                    ? (float) $amount
+                    : (float) $amount * 4100;
+            };
+
             $totalEvents = $events->count();
             $totalBookings = $events->sum('bookings_count');
             $totalTickets = $events->sum(fn ($event) => (int) ($event->booked_tickets ?? 0));
-            $totalSales = $events->sum(fn ($event) => (float) ($event->gross_sales ?? 0));
+            $totalSales = $events->sum(fn ($event) => $event->bookings->sum(
+                fn ($booking) => $toRiels($booking->total_price, $booking->payment?->currency)
+            ));
         @endphp
 
         <section class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -61,7 +69,7 @@
             </div>
             <div class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200">
                 <p class="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Sales</p>
-                <p class="mt-2 text-3xl font-black">${{ number_format($totalSales, 2) }}</p>
+                <p class="mt-2 text-3xl font-black">{{ number_format($totalSales, 0) }} Riels</p>
             </div>
         </section>
 
@@ -95,6 +103,9 @@
                                 $bookedTickets = (int) ($event->booked_tickets ?? 0);
                                 $seatsLeft = max((int) $event->total_seats - $bookedTickets, 0);
                                 $soldPercent = $event->total_seats > 0 ? min(100, round(($bookedTickets / $event->total_seats) * 100)) : 0;
+                                $eventSales = $event->bookings->sum(
+                                    fn ($booking) => $toRiels($booking->total_price, $booking->payment?->currency)
+                                );
                             @endphp
                             <tr class="align-middle hover:bg-stone-50">
                                 <td class="px-5 py-4">
@@ -131,7 +142,7 @@
                                     <p class="mt-1 text-xs font-semibold text-slate-500">{{ $event->bookings_count }} booking(s)</p>
                                 </td>
                                 <td class="whitespace-nowrap px-5 py-4 font-black text-slate-950">
-                                    ${{ number_format((float) ($event->gross_sales ?? 0), 2) }}
+                                    {{ number_format($eventSales, 0) }} Riels
                                 </td>
                                 <td class="whitespace-nowrap px-5 py-4">
                                     <span class="inline-flex rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-emerald-700">

@@ -39,8 +39,6 @@
             <div class="mx-auto grid max-w-7xl gap-14 px-6 py-20 lg:grid-cols-2 lg:items-center">
 
                 <div>
-                   
-
                     <h1 class="mt-4 text-4xl font-bold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
                         Simple event booking for everyone
                     </h1>
@@ -52,7 +50,7 @@
                     <div class="mt-8 flex flex-wrap gap-4">
 
                         <a href="{{ route('events.index') }}"
-                           class="rounded-lg bg-orange-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-700">
+                           class="rounded-lg bg-yellow-400 px-6 py-3 text-sm font-semibold text-black transition hover:bg-orange-700">
                             Browse Events
                         </a>
 
@@ -105,72 +103,92 @@
         </section>
 
         <!-- Features Section -->
-        <section class="bg-stone-50">
-            <div class="mx-auto max-w-7xl px-6 py-20">
+        <section class="relative overflow-hidden bg-gradient-to-b from-stone-50 to-white">
 
+            <!-- Blur Decoration -->
+            <div class="absolute top-0 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-orange-100/40 blur-3xl"></div>
+
+            <div class="mx-auto max-w-7xl px-6 py-28">
+
+                <!-- Heading -->
                 <div class="max-w-2xl">
-                    
-                    <h2 class="mt-10 text-4xl font-bold tracking-tight ">
+
+                    <p class="text-sm font-bold uppercase tracking-[0.25em] text-orange-600">
+                        Features
+                    </p>
+
+                    <h2 class="mt-6 text-5xl font-extrabold tracking-tight text-slate-900">
                         Built with simplicity in mind
                     </h2>
 
-                    <p class="mt-4 text-lg leading-8 text-slate-600">
+                    <p class="mt-6 text-lg leading-8 text-slate-500">
                         Everything is designed to make event discovery and management easier.
                     </p>
+
                 </div>
 
-                <div class="mt-12 grid gap-6 md:grid-cols-3">
+                <!-- Cards -->
+                <div class="mt-16 grid gap-8 md:grid-cols-3">
 
-                    <!-- Card -->
-                    <div class="rounded-2xl bg-white p-8 shadow-sm">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100 text-lg font-bold text-orange-600">
+                    <!-- Card 1 -->
+                    <div class="group rounded-3xl bg-white p-8 shadow-md ring-1 ring-black/5 transition duration-300 hover:-translate-y-2 hover:shadow-2xl">
+
+                        <!-- Number -->
+                        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 text-lg font-extrabold text-white shadow-lg shadow-orange-500/30">
                             01
                         </div>
 
-                        <h3 class="mt-6 text-xl font-semibold">
+                        <h3 class="mt-8 text-2xl font-bold text-slate-900">
                             Easy Booking
                         </h3>
 
-                        <p class="mt-4 leading-7 text-slate-600">
+                        <p class="mt-5 leading-8 text-slate-500">
                             Find events quickly and book tickets with a smooth checkout experience.
                         </p>
+
                     </div>
 
-                    <!-- Card -->
-                    <div class="rounded-2xl bg-white p-8 shadow-sm">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-lg font-bold text-emerald-700">
+                    <!-- Card 2 -->
+                    <div class="group rounded-3xl bg-white p-8 shadow-md ring-1 ring-black/5 transition duration-300 hover:-translate-y-2 hover:shadow-2xl">
+
+                        <!-- Number -->
+                        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-green-400 text-lg font-extrabold text-white shadow-lg shadow-emerald-500/30">
                             02
                         </div>
 
-                        <h3 class="mt-6 text-xl font-semibold">
+                        <h3 class="mt-8 text-2xl font-bold text-slate-900">
                             Event Management
                         </h3>
 
-                        <p class="mt-4 leading-7 text-slate-600">
+                        <p class="mt-5 leading-8 text-slate-500">
                             Organizers can manage bookings, seats, and ticket activity in one place.
                         </p>
+
                     </div>
 
-                    <!-- Card -->
-                    <div class="rounded-2xl bg-white p-8 shadow-sm">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-lg font-bold text-amber-700">
+                    <!-- Card 3 -->
+                    <div class="group rounded-3xl bg-white p-8 shadow-md ring-1 ring-black/5 transition duration-300 hover:-translate-y-2 hover:shadow-2xl">
+
+                        <!-- Number -->
+                        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-400 text-lg font-extrabold text-white shadow-lg shadow-amber-500/30">
                             03
                         </div>
 
-                        <h3 class="mt-6 text-xl font-semibold">
+                        <h3 class="mt-8 text-2xl font-bold text-slate-900">
                             Clear Insights
                         </h3>
 
-                        <p class="mt-4 leading-7 text-slate-600">
+                        <p class="mt-5 leading-8 text-slate-500">
                             Keep track of bookings and event performance with simple data tools.
                         </p>
+
                     </div>
 
                 </div>
 
             </div>
-        </section>
 
+        </section>
         <!-- CTA Section -->
         <section class="bg-white">
             <div class="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-6 py-20 lg:flex-row lg:items-center">
@@ -190,7 +208,7 @@
                 </div>
 
                 <a href="{{ route('events.index') }}"
-                   class="rounded-lg bg-orange-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-700">
+                   class="rounded-lg bg-yellow-400 px-6 py-3 text-sm font-semibold text-black transition hover:bg-orange-700">
                     Browse Events
                 </a>
 

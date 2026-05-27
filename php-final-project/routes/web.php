@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 
@@ -66,7 +67,7 @@ $eventToView = function (Event $event): array {
 };
 
 $bookingToView = function (Booking $booking): array {
-    $booking->loadMissing(['event', 'status', 'payment', 'user']);
+    $booking->loadMissing(['event', 'status', 'payment.status', 'tickets', 'user']);
 
     $event = $booking->event;
     $user = $booking->user;
@@ -99,8 +100,14 @@ $bookingToView = function (Booking $booking): array {
         'ticket_type' => $booking->ticket_type ?? 'Standard',
         'quantity' => $booking->quantity,
         'payment_reference' => $booking->payment?->transaction_reference ?? 'Pending',
+        'payment_status' => $booking->payment?->status?->status_name ?? 'No payment',
         'payment_proof_name' => $booking->payment?->payment_proof ? basename($booking->payment->payment_proof) : null,
         'status' => $booking->status?->status_name ?? 'pending',
+        'ticket_codes' => $booking->tickets
+            ->where('ticket_status', 'valid')
+            ->pluck('ticket_code')
+            ->values()
+            ->all(),
         'booked_at' => $booking->booking_date?->format('M d, Y h:i A'),
     ];
 };
@@ -402,7 +409,7 @@ Route::get('/dashboard/owner', function () use ($requireRole) {
     $owner = Auth::user();
 
     return view('dashboard.owner', [
-        'events' => Event::with(['category', 'status'])
+        'events' => Event::with(['category', 'status', 'bookings.payment'])
             ->withCount('bookings')
             ->withSum('bookings as booked_tickets', 'quantity')
             ->withSum('bookings as gross_sales', 'total_price')
@@ -499,7 +506,7 @@ Route::get('/dashboard/owner/events/{event}', function (string $event) use ($req
 
     $owner = Auth::user();
 
-    $eventModel = Event::with(['category', 'status'])
+    $eventModel = Event::with(['category', 'status', 'bookings.payment'])
         ->withCount('bookings')
         ->withSum('bookings as booked_tickets', 'quantity')
         ->withSum('bookings as gross_sales', 'total_price')
@@ -769,6 +776,96 @@ Route::get('/dashboard/admin/users', function (Request $request) use ($requireRo
     ]);
 })->name('admin.users.index');
 
+Route::patch('/dashboard/admin/users/{user}/owner-request/approve', function (User $user) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
+    $ownerRole = Role::firstOrCreate(['role_name' => 'event_owner']);
+
+    $user->update([
+        'role_id' => $ownerRole->id,
+        'owner_requested_at' => null,
+    ]);
+
+    return redirect()
+        ->route('admin.dashboard')
+        ->with('success', 'Owner permission approved. The user can now access the event owner dashboard.');
+})->name('admin.owner-requests.approve');
+
+Route::patch('/dashboard/admin/users/{user}/owner-request/reject', function (User $user) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
+    $user->update(['owner_requested_at' => null]);
+
+    return redirect()
+        ->route('admin.dashboard')
+        ->with('success', 'Owner permission request rejected.');
+})->name('admin.owner-requests.reject');
+
+Route::patch('/dashboard/admin/bookings/{booking}/payment/approve', function (Booking $booking) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
+    DB::transaction(function () use ($booking) {
+        $confirmedStatus = BookingStatus::firstOrCreate(['status_name' => 'confirmed']);
+        $paidStatus = PaymentStatus::firstOrCreate(['status_name' => 'paid']);
+
+        $booking->loadMissing(['payment', 'tickets']);
+        $booking->update(['booking_status_id' => $confirmedStatus->id]);
+        $booking->payment?->update([
+            'payment_status_id' => $paidStatus->id,
+            'khqr_checked_at' => now(),
+        ]);
+        $booking->tickets()->update(['ticket_status' => 'valid']);
+    });
+
+    return redirect()
+        ->route('admin.dashboard')
+        ->with('success', 'Payment approved. Tickets are now available to the user.');
+})->name('admin.payments.approve');
+
+Route::patch('/dashboard/admin/bookings/{booking}/payment/reject', function (Booking $booking) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
+    DB::transaction(function () use ($booking) {
+        $failedBookingStatus = BookingStatus::firstOrCreate(['status_name' => 'failed']);
+        $failedPaymentStatus = PaymentStatus::firstOrCreate(['status_name' => 'failed']);
+
+        $booking->loadMissing(['payment', 'tickets']);
+        $booking->update(['booking_status_id' => $failedBookingStatus->id]);
+        $booking->payment?->update([
+            'payment_status_id' => $failedPaymentStatus->id,
+            'khqr_checked_at' => now(),
+        ]);
+        $booking->tickets()->update(['ticket_status' => 'payment_rejected']);
+    });
+
+    return redirect()
+        ->route('admin.dashboard')
+        ->with('success', 'Payment rejected. The user must submit a correct payment reference/proof.');
+})->name('admin.payments.reject');
+
+Route::get('/dashboard/admin/bookings/{booking}/payment/proof', function (Booking $booking) use ($requireRole) {
+    if ($response = $requireRole(['admin'])) {
+        return $response;
+    }
+
+    $booking->loadMissing('payment');
+    $proofPath = $booking->payment?->payment_proof;
+
+    if (blank($proofPath) || ! Storage::disk('public')->exists($proofPath)) {
+        abort(404, 'Payment proof not found.');
+    }
+
+    return response()->file(Storage::disk('public')->path($proofPath));
+})->name('admin.payments.proof');
+
 Route::get('/dashboard/admin', function (Request $request) use ($allEventViews, $allBookingViews, $requireRole) {
     if ($response = $requireRole(['admin'])) {
         return $response;
@@ -780,6 +877,16 @@ Route::get('/dashboard/admin', function (Request $request) use ($allEventViews, 
         'adminUser' => Auth::user()?->loadMissing('role'),
         'events' => $allEventViews(),
         'bookings' => $allBookingViews(),
+        'paymentReviews' => Booking::with(['event', 'user', 'status', 'payment.status'])
+            ->whereHas('payment.status', fn ($query) => $query->where('status_name', 'review'))
+            ->latest('booking_date')
+            ->get(),
+        'ownerRequests' => User::with('role')
+            ->withCount(['bookings', 'organizedEvents'])
+            ->whereNotNull('owner_requested_at')
+            ->whereDoesntHave('role', fn ($query) => $query->where('role_name', 'event_owner'))
+            ->latest('owner_requested_at')
+            ->get(),
         'usersCount' => User::count(),
         'users' => User::with('role')
             ->withCount(['bookings', 'organizedEvents'])
@@ -925,6 +1032,7 @@ Route::post('/events/{event}/booking', function (Request $request, string $event
                 'booking_id' => $booking->id,
                 'ticket_code' => 'TCK-' . strtoupper(Str::random(10)),
                 'qr_code' => $booking->booking_code . '-' . $i,
+                'ticket_status' => $khqrCheck['paid'] ? 'valid' : 'pending_payment',
             ]);
         }
 

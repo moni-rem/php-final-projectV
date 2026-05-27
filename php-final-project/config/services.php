@@ -23,14 +23,18 @@ return [
     ],
 
     'bakong_khqr' => [
+        'mode' => env('BAKONG_KHQR_MODE', 'static'),
         'provider' => env('BAKONG_KHQR_PROVIDER', 'fluid'),
         'base_url' => env('BAKONG_KHQR_BASE_URL'),
+        'create_path' => env('BAKONG_KHQR_CREATE_PATH', '/khqr/create'),
+        'check_md5_path' => env('BAKONG_KHQR_CHECK_MD5_PATH', '/check_by_md5'),
         'account_id' => env('BAKONG_KHQR_ACCOUNT_ID'),
         'merchant_name' => env('BAKONG_KHQR_MERCHANT_NAME', env('APP_NAME', 'Laravel')),
         'merchant_city' => env('BAKONG_KHQR_MERCHANT_CITY', 'PHNOM PENH'),
         'token' => env('BAKONG_KHQR_TOKEN'),
         'test_mode' => env('BAKONG_KHQR_TEST_MODE', false),
         'static_image' => env('BAKONG_KHQR_STATIC_IMAGE'),
+        'ssl_verify' => env('BAKONG_KHQR_SSL_VERIFY', true),
     ],
 
     'ses' => [

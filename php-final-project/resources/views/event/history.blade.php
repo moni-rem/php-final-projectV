@@ -82,11 +82,29 @@
                                     <div class="rounded-md bg-stone-50 p-4">
                                         <p class="text-xs font-black uppercase tracking-[0.16em] text-slate-400">KHQR Ref</p>
                                         <p class="mt-1 break-words text-sm font-bold text-slate-800">{{ $booking['payment_reference'] }}</p>
+                                        <p class="mt-1 text-xs font-black uppercase tracking-[0.12em] text-slate-400">{{ $booking['payment_status'] }}</p>
                                     </div>
                                     <div class="rounded-md bg-stone-50 p-4">
                                         <p class="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Booked At</p>
                                         <p class="mt-1 text-sm font-bold text-slate-800">{{ $booking['booked_at'] }}</p>
                                     </div>
+                                </div>
+
+                                <div class="mt-5 rounded-md border border-slate-200 bg-white p-4">
+                                    <p class="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Tickets</p>
+                                    @if (! empty($booking['ticket_codes']))
+                                        <div class="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                            @foreach ($booking['ticket_codes'] as $ticketCode)
+                                                <span class="rounded-md bg-emerald-50 px-3 py-2 text-sm font-black text-emerald-800">
+                                                    {{ $ticketCode }}
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                    @else
+                                        <p class="mt-2 text-sm font-bold text-amber-700">
+                                            Tickets will appear here after admin verifies your KHQR payment.
+                                        </p>
+                                    @endif
                                 </div>
 
                                 <div class="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-5 text-sm font-bold text-slate-600 sm:flex-row sm:items-center sm:justify-between">

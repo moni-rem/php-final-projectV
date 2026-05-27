@@ -17,9 +17,18 @@
         </nav>
 
         @php
+            $toRiels = function ($amount, $currency = 'USD') {
+                return strtoupper((string) $currency) === 'KHR'
+                    ? (float) $amount
+                    : (float) $amount * 4100;
+            };
+
             $bookedTickets = (int) ($event->booked_tickets ?? 0);
             $seatsLeft = max((int) $event->total_seats - $bookedTickets, 0);
             $soldPercent = $event->total_seats > 0 ? min(100, round(($bookedTickets / $event->total_seats) * 100)) : 0;
+            $eventSales = $event->bookings->sum(
+                fn ($booking) => $toRiels($booking->total_price, $booking->payment?->currency)
+            );
         @endphp
 
         <section class="overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-slate-200">
@@ -56,7 +65,7 @@
                         </div>
                         <div class="rounded-lg bg-stone-50 p-4">
                             <p class="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Sales</p>
-                            <p class="mt-2 text-2xl font-black">${{ number_format((float) ($event->gross_sales ?? 0), 2) }}</p>
+                            <p class="mt-2 text-2xl font-black">{{ number_format($eventSales, 0) }} Riels</p>
                         </div>
                     </div>
 
@@ -94,6 +103,9 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse ($bookings as $booking)
+                            @php
+                                $bookingTotal = $toRiels($booking->total_price, $booking->payment?->currency);
+                            @endphp
                             <tr class="align-middle hover:bg-stone-50">
                                 <td class="whitespace-nowrap px-5 py-4">
                                     <p class="font-black text-slate-950">{{ $booking->booking_code }}</p>
@@ -107,7 +119,7 @@
                                     {{ $booking->quantity }}
                                 </td>
                                 <td class="whitespace-nowrap px-5 py-4 font-black text-slate-950">
-                                    ${{ number_format((float) $booking->total_price, 2) }}
+                                    {{ number_format($bookingTotal, 0) }} Riels
                                 </td>
                                 <td class="min-w-[180px] px-5 py-4">
                                     <p class="break-words font-bold text-slate-800">{{ $booking->payment?->transaction_reference ?? 'Pending' }}</p>

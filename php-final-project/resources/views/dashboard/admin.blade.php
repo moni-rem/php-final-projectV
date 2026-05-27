@@ -13,6 +13,8 @@
         $ticketCount = collect($bookings)->sum(fn ($booking) => (int) ($booking['quantity'] ?? 0));
         $users = $users ?? collect();
         $roles = $roles ?? collect();
+        $paymentReviews = $paymentReviews ?? collect();
+        $ownerRequests = $ownerRequests ?? collect();
         $userSearch = $userSearch ?? '';
         $adminUser = $adminUser ?? null;
         $adminName = $adminUser?->full_name ?: $adminUser?->name ?: 'Admin';
@@ -23,7 +25,13 @@
             ->map(fn ($part) => strtoupper(substr($part, 0, 1)))
             ->implode('') ?: 'A';
         $revenue = collect($bookings)->sum(function ($booking) {
-            $price = (float) str_replace(['$', ','], '', $booking['event_price'] ?? 0);
+            $priceText = (string) ($booking['event_price'] ?? 0);
+            $price = (float) str_replace(['$', ',', 'Riels', 'KHR', '៛'], '', $priceText);
+
+            if (! str_contains($priceText, 'Riels') && ! str_contains($priceText, 'KHR') && ! str_contains($priceText, '៛')) {
+                $price *= 4100;
+            }
+
             return $price * (int) ($booking['quantity'] ?? 0);
         });
     @endphp
@@ -103,7 +111,7 @@
                 <article class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200">
                     <p class="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Users</p>
                     <p class="mt-2 text-3xl font-black">{{ number_format($usersCount) }}</p>
-                    <p class="mt-2 text-sm font-semibold text-slate-500">Registered accounts</p>
+                    <p class="mt-2 text-sm font-semibold text-slate-500">{{ number_format($ownerRequests->count()) }} owner request(s)</p>
                 </article>
                 <article class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200">
                     <p class="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Events</p>
@@ -117,9 +125,153 @@
                 </article>
                 <article class="rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200">
                     <p class="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Revenue</p>
-                    <p class="mt-2 text-3xl font-black">${{ number_format($revenue, 2) }}</p>
+                    <p class="mt-2 text-3xl font-black">{{ number_format($revenue, 0) }} Riels</p>
                     <p class="mt-2 text-sm font-semibold text-slate-500">From saved bookings</p>
                 </article>
+            </section>
+
+            <section class="mt-8 overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-slate-200">
+                <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-xl font-black">Payment verification</h2>
+                        <p class="mt-1 text-sm font-semibold text-slate-500">Approve KHQR payment proof before users receive valid ticket codes.</p>
+                    </div>
+                    <span class="inline-flex w-fit rounded-md bg-amber-100 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-amber-800">
+                        {{ $paymentReviews->count() }} pending
+                    </span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                        <thead class="bg-stone-100 text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+                            <tr>
+                                <th scope="col" class="px-5 py-4">Booking</th>
+                                <th scope="col" class="px-5 py-4">Customer</th>
+                                <th scope="col" class="px-5 py-4">Payment</th>
+                                <th scope="col" class="px-5 py-4">Proof</th>
+                                <th scope="col" class="px-5 py-4 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse ($paymentReviews as $review)
+                                <tr class="align-top hover:bg-stone-50">
+                                    <td class="min-w-[220px] px-5 py-4">
+                                        <p class="font-black text-slate-950">{{ $review->booking_code }}</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $review->event?->title ?? 'Unknown event' }}</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $review->booking_date?->format('M d, Y h:i A') }}</p>
+                                    </td>
+                                    <td class="min-w-[220px] px-5 py-4">
+                                        <p class="font-bold text-slate-800">{{ $review->user?->full_name ?: $review->user?->name ?: 'Guest User' }}</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $review->user?->email ?? 'No email' }}</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $review->user?->phone ?? 'No phone' }}</p>
+                                    </td>
+                                    <td class="min-w-[220px] px-5 py-4">
+                                        <p class="font-black text-slate-950">
+                                            {{ $review->payment?->currency === 'KHR'
+                                                ? number_format((float) $review->payment?->paid_amount, 0) . ' KHR'
+                                                : '$' . number_format((float) $review->payment?->paid_amount, 2) }}
+                                        </p>
+                                        <p class="mt-1 break-words text-xs font-semibold text-slate-500">Ref: {{ $review->payment?->transaction_reference ?? 'Missing' }}</p>
+                                        <p class="mt-1 text-xs font-black uppercase tracking-[0.12em] text-amber-700">{{ $review->payment?->status?->status_name ?? 'review' }}</p>
+                                    </td>
+                                    <td class="whitespace-nowrap px-5 py-4">
+                                        @if ($review->payment?->payment_proof)
+                                            <button
+                                                type="button"
+                                                data-proof-open
+                                                data-proof-url="{{ route('admin.payments.proof', $review) }}"
+                                                data-proof-title="{{ $review->booking_code }} payment proof"
+                                                class="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-black text-slate-800 hover:bg-white">
+                                                View proof
+                                            </button>
+                                        @else
+                                            <span class="text-sm font-bold text-slate-400">No file</span>
+                                        @endif
+                                    </td>
+                                    <td class="whitespace-nowrap px-5 py-4 text-right">
+                                        <div class="flex justify-end gap-2">
+                                            <form method="POST" action="{{ route('admin.payments.approve', $review) }}">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-black text-white hover:bg-emerald-800">Approve</button>
+                                            </form>
+                                            <form method="POST" action="{{ route('admin.payments.reject', $review) }}">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-md border border-red-200 px-4 text-sm font-black text-red-700 hover:bg-red-50">Reject</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5" class="px-5 py-10 text-center text-sm font-bold text-slate-500">No payments waiting for review.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="mt-8 overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-slate-200">
+                <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-xl font-black">Owner permission requests</h2>
+                        <p class="mt-1 text-sm font-semibold text-slate-500">Approve users who requested access to create and manage events.</p>
+                    </div>
+                    <span class="inline-flex w-fit rounded-md bg-amber-100 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-amber-800">
+                        {{ $ownerRequests->count() }} pending
+                    </span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                        <thead class="bg-stone-100 text-xs font-black uppercase tracking-[0.16em] text-slate-500">
+                            <tr>
+                                <th scope="col" class="px-5 py-4">Account</th>
+                                <th scope="col" class="px-5 py-4">Requested</th>
+                                <th scope="col" class="px-5 py-4">Activity</th>
+                                <th scope="col" class="px-5 py-4 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse ($ownerRequests as $requestUser)
+                                <tr class="align-top hover:bg-stone-50">
+                                    <td class="min-w-[240px] px-5 py-4">
+                                        <p class="font-black text-slate-950">{{ $requestUser->full_name ?: $requestUser->name }}</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $requestUser->email }}</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ $requestUser->phone ?? 'No phone' }}</p>
+                                    </td>
+                                    <td class="whitespace-nowrap px-5 py-4">
+                                        <p class="font-bold text-slate-800">{{ $requestUser->owner_requested_at?->format('M d, Y h:i A') }}</p>
+                                        <p class="mt-1 text-xs font-black uppercase tracking-[0.12em] text-amber-700">{{ $requestUser->role?->role_name ?? 'user' }}</p>
+                                    </td>
+                                    <td class="whitespace-nowrap px-5 py-4 font-semibold text-slate-600">
+                                        {{ $requestUser->bookings_count }} booking(s) / {{ $requestUser->organized_events_count }} event(s)
+                                    </td>
+                                    <td class="whitespace-nowrap px-5 py-4 text-right">
+                                        <div class="flex justify-end gap-2">
+                                            <form method="POST" action="{{ route('admin.owner-requests.approve', $requestUser) }}">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-black text-white hover:bg-emerald-800">Approve</button>
+                                            </form>
+                                            <form method="POST" action="{{ route('admin.owner-requests.reject', $requestUser) }}">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-md border border-red-200 px-4 text-sm font-black text-red-700 hover:bg-red-50">Reject</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="px-5 py-10 text-center text-sm font-bold text-slate-500">No owner permissions waiting for review.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
             <section class="mt-8 rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -249,7 +401,13 @@
                             <tbody class="divide-y divide-slate-100">
                                 @forelse ($bookings as $booking)
                                     @php
-                                        $unitPrice = (float) str_replace(['$', ','], '', $booking['event_price'] ?? 0);
+                                        $priceText = (string) ($booking['event_price'] ?? 0);
+                                        $unitPrice = (float) str_replace(['$', ',', 'Riels', 'KHR', '៛'], '', $priceText);
+
+                                        if (! str_contains($priceText, 'Riels') && ! str_contains($priceText, 'KHR') && ! str_contains($priceText, '៛')) {
+                                            $unitPrice *= 4100;
+                                        }
+
                                         $lineTotal = $unitPrice * (int) ($booking['quantity'] ?? 0);
                                     @endphp
                                     <tr class="hover:bg-stone-50">
@@ -259,7 +417,7 @@
                                             <p class="mt-1 text-xs font-semibold text-slate-500">{{ $booking['booked_at'] }}</p>
                                         </td>
                                         <td class="whitespace-nowrap px-5 py-4 font-black text-slate-950">{{ $booking['quantity'] }}</td>
-                                        <td class="whitespace-nowrap px-5 py-4 text-right font-black text-slate-950">${{ number_format($lineTotal, 2) }}</td>
+                                        <td class="whitespace-nowrap px-5 py-4 text-right font-black text-slate-950">{{ number_format($lineTotal, 0) }} Riels</td>
                                     </tr>
                                 @empty
                                     <tr>
@@ -401,5 +559,83 @@
             </section>
         </main>
     </div>
+
+    <div class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/70 px-4 py-6" data-proof-modal>
+        <div class="flex h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                <div>
+                    <p class="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Payment proof</p>
+                    <h2 class="mt-1 text-lg font-black text-slate-950" data-proof-title>Proof preview</h2>
+                </div>
+                <button type="button" data-proof-close class="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-stone-50" aria-label="Close proof preview">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+
+            <iframe data-proof-frame title="Payment proof preview" class="min-h-0 flex-1 bg-stone-100"></iframe>
+
+            <div class="flex justify-end border-t border-slate-200 px-4 py-3">
+                <a href="#" target="_blank" data-proof-new-tab class="inline-flex min-h-10 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-black text-white hover:bg-slate-800">
+                    Open full page
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.querySelector('[data-proof-modal]');
+            const frame = document.querySelector('[data-proof-frame]');
+            const title = document.querySelector('[data-proof-title]');
+            const newTab = document.querySelector('[data-proof-new-tab]');
+
+            const closeProof = () => {
+                if (! modal) {
+                    return;
+                }
+
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+
+                if (frame) {
+                    frame.removeAttribute('src');
+                }
+            };
+
+            document.querySelectorAll('[data-proof-open]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const url = button.dataset.proofUrl;
+
+                    if (! url || ! modal) {
+                        return;
+                    }
+
+                    if (title) {
+                        title.textContent = button.dataset.proofTitle || 'Proof preview';
+                    }
+
+                    if (frame) {
+                        frame.src = url;
+                    }
+
+                    if (newTab) {
+                        newTab.href = url;
+                    }
+
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+                });
+            });
+
+            document.querySelector('[data-proof-close]')?.addEventListener('click', closeProof);
+            modal?.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    closeProof();
+                }
+            });
+        });
+    </script>
 </body>
 </html>
